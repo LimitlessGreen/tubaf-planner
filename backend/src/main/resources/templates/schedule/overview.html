@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout/base :: layout(~{::title}, ~{::content})}">
+<head>
+    <title>Stundenplan</title>
+</head>
+<body>
+    <div th:fragment="content">
+        <div class="container-fluid py-4">
+            <!-- Header -->
+            <div class="row">
+                <div class="col-12">
+                    <h1 class="h2 mb-4">
+                        <i class="fas fa-calendar-alt me-2"></i>Stundenplan
+                    </h1>
+                </div>
+            </div>
+
+            <!-- Selection Cards -->
+            <div class="row">
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-graduation-cap me-2"></i>Nach Semester
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">Wählen Sie ein Semester aus, um den Stundenplan anzuzeigen.</p>
+                            
+                            <div th:if="${semesters.empty}" class="alert alert-info">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Keine Semester verfügbar.
+                            </div>
+                            
+                            <div th:each="semester : ${semesters}" class="mb-2">
+                                <div class="card border-light">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="mb-1" th:text="${semester.name}">Semester Name</h6>
+                                                <small class="text-muted" th:text="${semester.shortName}">Code</small>
+                                            </div>
+                                            <div>
+                                                <a th:href="@{/schedule/semester/{id}(id=${semester.id})}" 
+                                                   class="btn btn-primary btn-sm">
+                                                    <i class="fas fa-eye me-1"></i>Anzeigen
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-users me-2"></i>Nach Studiengang
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">Filtern Sie den Stundenplan nach Studiengang.</p>
+                            
+                            <div th:if="${studyPrograms.empty}" class="alert alert-info">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Keine Studiengänge verfügbar.
+                            </div>
+                            
+                            <div th:each="program : ${studyPrograms}" class="mb-2">
+                                <div class="card border-light">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="mb-1" th:text="${program.name}">Program Name</h6>
+                                                <small class="text-muted">
+                                                    <span th:text="${program.code}">CODE</span> - 
+                                                    <span th:text="${program.degreeType}">Type</span>
+                                                </small>
+                                            </div>
+                                            <div class="btn-group">
+                                                <button type="button" class="btn btn-success btn-sm dropdown-toggle" 
+                                                        data-bs-toggle="dropdown">
+                                                    <i class="fas fa-filter me-1"></i>Wählen
+                                                </button>
+                                                <ul class="dropdown-menu">
+                                                    <li th:each="semester : ${semesters}">
+                                                        <a class="dropdown-item" 
+                                                           th:href="@{/schedule/semester/{semId}(semId=${semester.id}, studyProgramId=${program.id})}">
+                                                            <span th:text="${semester.shortName}">Semester</span>
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Additional Options -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-search me-2"></i>Weitere Optionen
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <a th:href="@{/data/rooms}" class="btn btn-outline-primary btn-lg w-100">
+                                        <i class="fas fa-door-open me-2"></i>
+                                        Raumbelegung
+                                    </a>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <a th:href="@{/courses}" class="btn btn-outline-success btn-lg w-100">
+                                        <i class="fas fa-chalkboard-teacher me-2"></i>
+                                        Dozentenpläne
+                                    </a>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <a th:href="@{/data/scraping}" class="btn btn-outline-warning btn-lg w-100">
+                                        <i class="fas fa-sync me-2"></i>
+                                        Daten aktualisieren
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

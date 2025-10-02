@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/base :: layout('Stundenplan', ~{::content})}">
+<head><title>Stundenplan</title></head>
+<body>
+<div th:fragment="content">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>
+                <i class="bi bi-calendar-week"></i> Stundenplan
+                <span th:if="${semester}" th:text="' - ' + ${semester.shortName}" class="text-muted">- WS24</span>
+                <span th:if="${studyProgram}" th:text="' - ' + ${studyProgram.shortName}" class="text-muted">- INF</span>
+            </h2>
+            <p class="text-muted mb-0" th:if="${semester}">
+                <span th:text="${semester.name}">Wintersemester 2024/25</span>
+                <span th:if="${studyProgram}" th:text="' • ' + ${studyProgram.name}"> • Informatik</span>
+            </p>
+        </div>
+        <div>
+            <a th:href="@{/schedule}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Zurück
+            </a>
+            <div class="dropdown d-inline-block">
+                <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-filter"></i> Filter
+                </button>
+                <ul class="dropdown-menu">
+                    <li><h6 class="dropdown-header">Semester</h6></li>
+                    <li th:each="sem : ${allSemesters}">
+                        <a class="dropdown-item" 
+                           th:href="@{/schedule/semester/{id}(id=${sem.id}, studyProgramId=${studyProgram?.id})}"
+                           th:classappend="${semester?.id == sem.id} ? 'active' : ''"
+                           th:text="${sem.shortName}">WS24</a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header">Studiengang</h6></li>
+                    <li>
+                        <a class="dropdown-item" 
+                           th:href="@{/schedule/semester/{id}(id=${semester?.id})}"
+                           th:classappend="${studyProgram == null} ? 'active' : ''">
+                            Alle Studiengänge
+                        </a>
+                    </li>
+                    <li th:each="prog : ${allStudyPrograms}">
+                        <a class="dropdown-item" 
+                           th:href="@{/schedule/semester/{id}(id=${semester?.id}, studyProgramId=${prog.id})}"
+                           th:classappend="${studyProgram?.id == prog.id} ? 'active' : ''"
+                           th:text="${prog.shortName}">INF</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Weekly Schedule Grid -->
+    <div th:if="${scheduleEntries && !scheduleEntries.empty}">
+        <div class="table-responsive">
+            <table class="table table-bordered schedule-table">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width: 100px;">Zeit</th>
+                        <th>Montag</th>
+                        <th>Dienstag</th>
+                        <th>Mittwoch</th>
+                        <th>Donnerstag</th>
+                        <th>Freitag</th>
+                        <th>Samstag</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Time slots from 8:00 to 20:00 -->
+                    <tr th:each="hour : ${#numbers.sequence(8, 19)}">
+                        <td class="time-slot text-center" th:text="${hour + ':00 - ' + (hour + 1) + ':00'}">8:00 - 9:00</td>
+                        <!-- Monday to Saturday -->
+                        <td th:each="day : ${T(java.time.DayOfWeek).values()}" 
+                            th:if="${day.getValue() <= 6}"
+                            class="schedule-cell position-relative">
+                            <div th:each="entry : ${scheduleEntries}"
+                                 th:if="${entry.dayOfWeek == day && entry.startTime.hour == hour}"
+                                 class="schedule-entry mb-1">
+                                <div class="card h-100 border-0 shadow-sm"
+                                     th:classappend="'border-start border-4 border-' + ${entry.course?.courseType?.name == 'VORLESUNG' ? 'primary' : 
+                                                                                        entry.course?.courseType?.name == 'UEBUNG' ? 'success' : 
+                                                                                        entry.course?.courseType?.name == 'PRAKTIKUM' ? 'warning' : 'info'}">
+                                    <div class="card-body p-2">
+                                        <h6 class="card-title small mb-1" th:text="${entry.course?.name}">Kursname</h6>
+                                        <p class="card-text small text-muted mb-1">
+                                            <i class="bi bi-person"></i> <span th:text="${entry.course?.lecturer?.name}">Dozent</span><br>
+                                            <i class="bi bi-geo-alt"></i> <span th:text="${entry.room?.name}">Raum</span><br>
+                                            <i class="bi bi-clock"></i> 
+                                            <span th:text="${#temporals.format(entry.startTime, 'HH:mm')} + ' - ' + ${#temporals.format(entry.endTime, 'HH:mm')}">08:00 - 09:30</span>
+                                        </p>
+                                        <span class="badge badge-sm" 
+                                              th:text="${entry.course?.courseType?.displayName}"
+                                              th:classappend="'bg-' + ${entry.course?.courseType?.name == 'VORLESUNG' ? 'primary' : 
+                                                                     entry.course?.courseType?.name == 'UEBUNG' ? 'success' : 
+                                                                     entry.course?.courseType?.name == 'PRAKTIKUM' ? 'warning' : 'info'}">VL</span>
+                                        <span th:if="${studyProgram == null}" class="badge bg-secondary badge-sm ms-1" 
+                                              th:text="${entry.course?.studyPrograms?.size() > 0 ? entry.course?.studyPrograms?.![shortName] : 'Alle'}">INF</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Legend -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h6>Legende:</h6>
+                        <div class="d-flex flex-wrap gap-3">
+                            <div class="d-flex align-items-center">
+                                <div class="border-start border-4 border-primary me-2" style="width: 20px; height: 20px;"></div>
+                                <span>Vorlesung</span>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <div class="border-start border-4 border-success me-2" style="width: 20px; height: 20px;"></div>
+                                <span>Übung</span>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <div class="border-start border-4 border-warning me-2" style="width: 20px; height: 20px;"></div>
+                                <span>Praktikum</span>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <div class="border-start border-4 border-info me-2" style="width: 20px; height: 20px;"></div>
+                                <span>Sonstige</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Empty State -->
+    <div th:unless="${scheduleEntries && !scheduleEntries.empty}" class="text-center mt-5">
+        <i class="bi bi-calendar-x display-1 text-muted"></i>
+        <h4 class="text-muted mt-3">Keine Termine gefunden</h4>
+        <p class="text-muted">
+            <span th:if="${semester}">Für das Semester '<span th:text="${semester.shortName}">WS24</span>' </span>
+            <span th:if="${studyProgram}">und den Studiengang '<span th:text="${studyProgram.shortName}">INF</span>' </span>
+            sind keine Termine vorhanden.
+        </p>
+        <div class="mt-3">
+            <a th:href="@{/data/scraping}" class="btn btn-primary me-2">
+                <i class="bi bi-download"></i> Daten laden
+            </a>
+            <a th:href="@{/schedule}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Zurück zur Übersicht
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.schedule-table {
+    font-size: 0.85rem;
+    min-height: 600px;
+}
+
+.time-slot {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    vertical-align: middle;
+}
+
+.schedule-cell {
+    width: 150px;
+    min-height: 60px;
+    vertical-align: top;
+    padding: 4px;
+}
+
+.schedule-entry {
+    position: relative;
+}
+
+.schedule-entry .card {
+    min-height: 80px;
+    font-size: 0.75rem;
+}
+
+.schedule-entry .card-title {
+    line-height: 1.2;
+}
+
+.badge-sm {
+    font-size: 0.65rem;
+}
+
+@media (max-width: 768px) {
+    .schedule-table {
+        font-size: 0.7rem;
+    }
+    
+    .schedule-cell {
+        width: 120px;
+        min-height: 50px;
+        padding: 2px;
+    }
+    
+    .schedule-entry .card {
+        min-height: 60px;
+    }
+}
+</style>
+</body>
+</html>

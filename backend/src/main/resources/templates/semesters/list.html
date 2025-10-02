@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/base :: layout('Semester Übersicht', ~{::content})}">
+<head><title>Semester</title></head>
+<body>
+<div th:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Semester Übersicht</h2>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newSemesterModal">
+            <i class="bi bi-plus"></i> Neues Semester
+        </button>
+    </div>
+    
+    <div class="row">
+        <div th:each="semester : ${semesters}" class="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0" th:text="${semester.name}">Wintersemester 2024/25</h6>
+                    <span th:if="${semester.active}" class="badge bg-success">Aktiv</span>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        <small class="text-muted">
+                            <strong>Kurz:</strong> <span th:text="${semester.shortName}">WS24</span><br>
+                            <strong>Zeitraum:</strong><br>
+                            <span th:text="${#temporals.format(semester.startDate, 'dd.MM.yyyy')}">01.10.2024</span> - 
+                            <span th:text="${#temporals.format(semester.endDate, 'dd.MM.yyyy')}">31.03.2025</span>
+                        </small>
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a th:href="@{/semesters/{id}(id=${semester.id})}" class="btn btn-primary btn-sm">
+                            <i class="bi bi-eye"></i> Details
+                        </a>
+                        <form th:if="${!semester.active}" th:action="@{/semesters/{id}/activate(id=${semester.id})}" method="post" class="d-inline">
+                            <button type="submit" class="btn btn-outline-success btn-sm w-100">
+                                <i class="bi bi-check-circle"></i> Aktivieren
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card-footer text-muted">
+                    <small>Erstellt: <span th:text="${#temporals.format(semester.createdAt, 'dd.MM.yyyy')}">28.09.2024</span></small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div th:if="${semesters.empty}" class="text-center mt-5">
+        <i class="bi bi-calendar-x display-1 text-muted"></i>
+        <h4 class="text-muted mt-3">Keine Semester vorhanden</h4>
+        <p class="text-muted">Erstellen Sie das erste Semester über den Button oben.</p>
+    </div>
+</div>
+</body>
+</html>

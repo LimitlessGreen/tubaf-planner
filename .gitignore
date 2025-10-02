@@ -1,0 +1,36 @@
+# Build outputs
+**/build/
+!src/**/build/
+**/out/
+
+# Gradle caches
+.gradle/
+**/.gradle/
+
+# IDE settings
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.sw?
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+*.tmp
+*.bak
+
+# Database files
+backend/data/*.db*
+backend/data/*.trace.db
+
+# Node / frontend
+node_modules/
+
+# Local overrides
+*.local.properties
+.env

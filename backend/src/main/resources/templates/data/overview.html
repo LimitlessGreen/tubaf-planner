@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout/base :: layout(~{::title}, ~{::content})}">
+<head>
+    <title>Datenübersicht</title>
+</head>
+<body>
+    <div th:fragment="content">
+        <div class="container-fluid py-4">
+            <!-- Header -->
+            <div class="row">
+                <div class="col-12">
+                    <h1 class="h2 mb-4">
+                        <i class="fas fa-database me-2"></i>Datenübersicht
+                    </h1>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-heartbeat me-2"></i>System Status
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-database fa-2x text-primary me-3"></i>
+                                        <div>
+                                            <h6 class="mb-0">Datenbank</h6>
+                                            <span class="badge bg-success">Online</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-spider fa-2x text-warning me-3"></i>
+                                        <div>
+                                            <h6 class="mb-0">Scraping Service</h6>
+                                            <span class="badge" 
+                                                  th:class="${scrapingActive} ? 'bg-success' : 'bg-secondary'"
+                                                  th:text="${scrapingActive} ? 'Aktiv' : 'Inaktiv'">Status</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-clock fa-2x text-info me-3"></i>
+                                        <div>
+                                            <h6 class="mb-0">Letztes Update</h6>
+                                            <small th:if="${lastUpdate}" 
+                                                   th:text="${#temporals.format(lastUpdate, 'dd.MM.yyyy HH:mm')}">--</small>
+                                            <small th:unless="${lastUpdate}" class="text-muted">Nie</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-exclamation-triangle fa-2x text-danger me-3"></i>
+                                        <div>
+                                            <h6 class="mb-0">Fehler</h6>
+                                            <span class="badge bg-danger" th:text="${errorCount ?: '0'}">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Statistics -->
+            <div class="row mb-4">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-chart-bar me-2"></i>Datenstatistiken
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <div class="text-center p-3 border rounded">
+                                        <i class="fas fa-graduation-cap fa-2x text-primary mb-2"></i>
+                                        <h4 class="mb-1" th:text="${stats.semesterCount ?: '0'}">0</h4>
+                                        <small class="text-muted">Semester</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="text-center p-3 border rounded">
+                                        <i class="fas fa-book fa-2x text-success mb-2"></i>
+                                        <h4 class="mb-1" th:text="${stats.courseCount ?: '0'}">0</h4>
+                                        <small class="text-muted">Kurse</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="text-center p-3 border rounded">
+                                        <i class="fas fa-calendar fa-2x text-warning mb-2"></i>
+                                        <h4 class="mb-1" th:text="${stats.scheduleEntryCount ?: '0'}">0</h4>
+                                        <small class="text-muted">Termineinträge</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="text-center p-3 border rounded">
+                                        <i class="fas fa-users fa-2x text-info mb-2"></i>
+                                        <h4 class="mb-1" th:text="${stats.studyProgramCount ?: '0'}">0</h4>
+                                        <small class="text-muted">Studiengänge</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="text-center p-3 border rounded">
+                                        <i class="fas fa-door-open fa-2x text-secondary mb-2"></i>
+                                        <h4 class="mb-1" th:text="${stats.roomCount ?: '0'}">0</h4>
+                                        <small class="text-muted">Räume</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="text-center p-3 border rounded">
+                                        <i class="fas fa-history fa-2x text-dark mb-2"></i>
+                                        <h4 class="mb-1" th:text="${stats.changeCount ?: '0'}">0</h4>
+                                        <small class="text-muted">Änderungen (7d)</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-cogs me-2"></i>Aktionen
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <a th:href="@{/data/scraping}" class="btn btn-primary">
+                                    <i class="fas fa-sync me-2"></i>Daten aktualisieren
+                                </a>
+                                <a th:href="@{/data/semesters}" class="btn btn-outline-primary">
+                                    <i class="fas fa-graduation-cap me-2"></i>Semester verwalten
+                                </a>
+                                <a th:href="@{/data/study-programs}" class="btn btn-outline-success">
+                                    <i class="fas fa-users me-2"></i>Studiengänge
+                                </a>
+                                <a th:href="@{/data/rooms}" class="btn btn-outline-info">
+                                    <i class="fas fa-door-open me-2"></i>Räume
+                                </a>
+                                <button class="btn btn-outline-warning" onclick="exportData()">
+                                    <i class="fas fa-download me-2"></i>Export
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="clearCache()">
+                                    <i class="fas fa-trash me-2"></i>Cache leeren
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-clock me-2"></i>Letzte Aktivitäten
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div th:if="${recentActivities.empty}" class="text-center py-3 text-muted">
+                                <i class="fas fa-info-circle me-1"></i>Keine aktuellen Aktivitäten
+                            </div>
+                            
+                            <div th:unless="${recentActivities.empty}" class="timeline">
+                                <div th:each="activity : ${recentActivities}" class="timeline-item mb-3">
+                                    <div class="d-flex">
+                                        <div class="flex-shrink-0">
+                                            <i class="fas fa-circle text-primary"></i>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <div class="d-flex justify-content-between">
+                                                <h6 class="mb-1" th:text="${activity.title}">Activity Title</h6>
+                                                <small class="text-muted" th:text="${#temporals.format(activity.timestamp, 'dd.MM.yyyy HH:mm')}">Timestamp</small>
+                                            </div>
+                                            <p class="text-muted mb-0" th:text="${activity.description}">Description</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        function exportData() {
+            // TODO: Implement data export
+            alert('Export-Funktion wird implementiert...');
+        }
+        
+        function clearCache() {
+            if(confirm('Sind Sie sicher, dass Sie den Cache leeren möchten?')) {
+                // TODO: Implement cache clearing
+                alert('Cache-Löschung wird implementiert...');
+            }
+        }
+        </script>
+    </div>
+</body>
+</html>

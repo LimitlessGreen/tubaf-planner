@@ -1,0 +1,98 @@
+# TUBAF Scraping Configuration
+tubaf:
+  scraper:
+    # Base URL für TUBAF Stundenplan
+    base-url: "https://evlvz.hrz.tu-freiberg.de/~vover/"
+    
+    # Timeout-Einstellungen
+    timeout: 30000  # 30 Sekunden
+    
+    # Browser-Einstellungen
+    headless: true
+    user-agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    
+    # Retry-Einstellungen
+    max-retries: 3
+    retry-delay: 1000  # 1 Sekunde
+    respectful-delay: 500  # Pause zwischen Requests
+    
+    # Scheduling
+    scheduling:
+      enabled: false  # Standardmäßig deaktiviert, kann per Profil aktiviert werden
+    
+    # Study Program Mappings für TUBAF
+    study-program-mappings:
+      ANBI:
+        full-name: "Angewandte Informatik"
+        degree-type: "BACHELOR"
+      ANMA:
+        full-name: "Angewandte Mathematik" 
+        degree-type: "BACHELOR"
+      BAET:
+        full-name: "Elektrotechnik"
+        degree-type: "BACHELOR"
+      BAIN:
+        full-name: "Informatik"
+        degree-type: "BACHELOR"
+      BAUM:
+        full-name: "Umwelt-Engineering"
+        degree-type: "BACHELOR"
+      BAWI:
+        full-name: "Wirtschaftsingenieurwesen"
+        degree-type: "BACHELOR"
+      MABA:
+        full-name: "Mathematik"
+        degree-type: "MASTER"
+      MAET:
+        full-name: "Elektrotechnik"
+        degree-type: "MASTER"
+      MAIN:
+        full-name: "Informatik"
+        degree-type: "MASTER"
+      MAUM:
+        full-name: "Umwelt-Engineering"
+        degree-type: "MASTER"
+    
+    # Building Mappings
+    building-mappings:
+      HSZ: "Hauptschulgebäude"
+      FEZ: "Forschungs- und Entwicklungszentrum"
+      GEO: "Geowissenschaften"
+      IUZ: "Informatik- und Umweltzentrum"
+      CHE: "Chemie"
+      PHY: "Physik"
+      MAS: "Maschinenbau"
+      BAU: "Bauingenieurwesen"
+    
+    # Course Type Mappings
+    course-type-mappings:
+      V:
+        german-name: "Vorlesung"
+        english-name: "Lecture"
+      Ü:
+        german-name: "Übung"
+        english-name: "Exercise"
+      S:
+        german-name: "Seminar"
+        english-name: "Seminar"
+      P:
+        german-name: "Praktikum"
+        english-name: "Lab/Practical"
+
+# Scheduling Profile (kann separat aktiviert werden)
+---
+spring:
+  config:
+    activate:
+      on-profile: "scheduling"
+
+tubaf:
+  scraper:
+    scheduling:
+      enabled: true
+
+# Logging für Scraping
+logging:
+  level:
+    de.tubaf.planner.service.scraping: DEBUG
+    com.microsoft.playwright: INFO

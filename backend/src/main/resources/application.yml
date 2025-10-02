@@ -1,0 +1,126 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: tubaf-planner
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tubaf_planner
+    username: tubaf_user
+    password: tubaf_password
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+  
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  
+  cache:
+    type: simple
+  
+  web:
+    cors:
+      allowed-origins: "http://localhost:4200,http://localhost:3000"
+      allowed-methods: "*"
+      allowed-headers: "*"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    de.tubaf.planner: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+tubaf:
+  scraper:
+    enabled: true
+    schedule: "0 0 2 * * ?" # Daily at 2 AM
+    timeout: 30
+    retry-attempts: 3
+    base-url: "https://evlvz.hrz.tu-freiberg.de/~vover/"
+  
+  playwright:
+    headless: true
+    timeout: 30000
+    navigation-timeout: 10000
+
+---
+server:
+  port: 8085
+
+spring:
+  config:
+    activate:
+      on-profile: dev
+  
+  datasource:
+    url: jdbc:h2:mem:tubaf-dev;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+  
+  flyway:
+    enabled: false
+
+tubaf:
+  scraper:
+    enabled: false
+
+---
+server:
+  port: 8083
+
+spring:
+  config:
+    activate:
+      on-profile: test
+  
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+tubaf:
+  scraper:
+    enabled: false
+  playwright:
+    headless: true

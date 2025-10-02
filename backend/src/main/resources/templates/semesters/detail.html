@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/base :: layout('Semester Details', ~{::content})}">
+<head><title>Semester Details</title></head>
+<body>
+<div th:fragment="content">
+    <!-- Semester Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 th:text="${semester.name}">Wintersemester 2024/25</h2>
+            <p class="text-muted mb-0">
+                <span th:text="${semester.shortName}" class="badge bg-secondary me-2">WS24</span>
+                <span th:if="${semester.active}" class="badge bg-success me-2">Aktiv</span>
+                <span th:text="'Zeitraum: ' + ${#temporals.format(semester.startDate, 'dd.MM.yyyy')} + ' - ' + ${#temporals.format(semester.endDate, 'dd.MM.yyyy')}">Zeitraum: 01.10.2024 - 31.03.2025</span>
+            </p>
+        </div>
+        <div>
+            <a th:href="@{/semesters}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Zurück
+            </a>
+            <form th:if="${!semester.active}" th:action="@{/semesters/{id}/activate(id=${semester.id})}" method="post" class="d-inline">
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-circle"></i> Aktivieren
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Statistics Row -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="bi bi-book fs-1 text-primary"></i>
+                    <h4 th:text="${totalCourses ?: 0}">0</h4>
+                    <p class="mb-0 text-muted">Kurse</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="bi bi-calendar-event fs-1 text-success"></i>
+                    <h4 th:text="${totalScheduleEntries ?: 0}">0</h4>
+                    <p class="mb-0 text-muted">Termine</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="bi bi-mortarboard fs-1 text-info"></i>
+                    <h4 th:text="${studyPrograms.size()}">0</h4>
+                    <p class="mb-0 text-muted">Studiengänge</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="bi bi-building fs-1 text-warning"></i>
+                    <h4 th:text="${usedRooms.size()}">0</h4>
+                    <p class="mb-0 text-muted">Genutzte Räume</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Study Programs -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5><i class="bi bi-mortarboard"></i> Studiengänge</h5>
+                </div>
+                <div class="card-body">
+                    <div th:if="${studyPrograms && !studyPrograms.empty}">
+                        <div class="list-group list-group-flush">
+                            <div th:each="program : ${studyPrograms}" class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                <div>
+                                    <strong th:text="${program.name}">Informatik</strong>
+                                    <small class="d-block text-muted" th:text="${program.shortName}">INF</small>
+                                </div>
+                                <a th:href="@{/schedule/studyProgram/{id}(id=${program.id}, semester=${semester.id})}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-calendar"></i> Stundenplan
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div th:unless="${studyPrograms && !studyPrograms.empty}">
+                        <p class="text-muted text-center">Keine Studiengänge vorhanden</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Scraping Activity -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="bi bi-download"></i> Scraping Aktivität</h5>
+                    <button th:if="${semester.active}" class="btn btn-sm btn-primary" 
+                            th:onclick="'startScraping(' + ${semester.id} + ')'">
+                        <i class="bi bi-arrow-clockwise"></i> Neu laden
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div th:if="${scrapingRuns && !scrapingRuns.empty}">
+                        <div class="list-group list-group-flush">
+                            <div th:each="run : ${scrapingRuns}" class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <small class="text-muted" th:text="${#temporals.format(run.startTime, 'dd.MM.yyyy HH:mm')}">28.09.2024 14:30</small>
+                                        <div>
+                                            <span th:text="'Status: ' + ${run.status}" 
+                                                  class="badge" 
+                                                  th:classappend="${run.status.name() == 'COMPLETED'} ? 'bg-success' : 
+                                                                 ${run.status.name() == 'FAILED'} ? 'bg-danger' : 'bg-warning'">COMPLETED</span>
+                                        </div>
+                                        <div th:if="${run.totalEntries}" class="mt-1">
+                                            <small class="text-muted">
+                                                <i class="bi bi-list"></i> <span th:text="${run.totalEntries}">150</span> Einträge
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span th:if="${run.endTime}" 
+                                              th:text="'Dauer: ' + ${T(java.time.Duration).between(run.startTime, run.endTime).toMinutes()} + 'm'" 
+                                              class="badge bg-light text-dark">Dauer: 3m</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div th:unless="${scrapingRuns && !scrapingRuns.empty}">
+                        <p class="text-muted text-center">Keine Scraping-Läufe vorhanden</p>
+                        <div class="text-center" th:if="${semester.active}">
+                            <button class="btn btn-primary" th:onclick="'startScraping(' + ${semester.id} + ')'">
+                                <i class="bi bi-download"></i> Erstes Scraping starten
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-lightning"></i> Aktionen</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-2">
+                            <a th:href="@{/schedule/semester/{id}(id=${semester.id})}" class="btn btn-outline-primary w-100">
+                                <i class="bi bi-calendar-week"></i> Gesamter Stundenplan
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <a th:href="@{/courses/semester/{id}(id=${semester.id})}" class="btn btn-outline-info w-100">
+                                <i class="bi bi-book"></i> Alle Kurse
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <a th:href="@{/schedule/rooms/semester/{id}(id=${semester.id})}" class="btn btn-outline-warning w-100">
+                                <i class="bi bi-building"></i> Raumauslastung
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <a th:href="@{/data/semester/{id}(id=${semester.id})}" class="btn btn-outline-success w-100">
+                                <i class="bi bi-bar-chart"></i> Statistiken
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function startScraping(semesterId) {
+    if (confirm('Scraping für dieses Semester starten? Dies kann einige Minuten dauern.')) {
+        const button = event.target;
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-arrow-repeat"></i> Lädt...';
+        
+        fetch(`/api/scraping/semester/${semesterId}/scrape`, {
+            method: 'POST'
+        })
+        .then(response => {
+            if (response.ok) {
+                alert('Scraping erfolgreich gestartet! Die Seite wird neu geladen.');
+                location.reload();
+            } else {
+                throw new Error('HTTP ' + response.status);
+            }
+        })
+        .catch(error => {
+            alert('Fehler beim Starten des Scrapings: ' + error.message);
+            button.disabled = false;
+            button.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Neu laden';
+        });
+    }
+}
+</script>
+</body>
+</html>

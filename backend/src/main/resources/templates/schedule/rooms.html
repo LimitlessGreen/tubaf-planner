@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/base :: layout('Raumauslastung', ~{::content})}">
+<head><title>Raumauslastung</title></head>
+<body>
+<div th:fragment="content">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-building"></i> Raumauslastung</h2>
+            <p class="text-muted mb-0" th:if="${semester}">
+                <span th:text="${semester.name}">Wintersemester 2024/25</span>
+            </p>
+        </div>
+        <div>
+            <a th:href="@{/schedule}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Zurück
+            </a>
+            <div class="dropdown d-inline-block" th:if="${allSemesters && !allSemesters.empty}">
+                <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-calendar"></i> 
+                    <span th:text="${semester?.shortName ?: 'Semester wählen'}">WS24</span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li th:each="sem : ${allSemesters}">
+                        <a class="dropdown-item" 
+                           th:href="@{/schedule/rooms(semester=${sem.id})}"
+                           th:classappend="${semester?.id == sem.id} ? 'active' : ''"
+                           th:text="${sem.shortName + ' - ' + sem.name}">WS24 - Wintersemester</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Room Statistics -->
+    <div class="row mb-4" th:if="${roomUtilization && !roomUtilization.empty}">
+        <div class="col-md-3">
+            <div class="card text-center bg-primary text-white">
+                <div class="card-body">
+                    <i class="bi bi-building fs-1"></i>
+                    <h4 th:text="${roomUtilization.size()}">0</h4>
+                    <p class="mb-0">Genutzte Räume</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-success text-white">
+                <div class="card-body">
+                    <i class="bi bi-check-circle fs-1"></i>
+                    <h4 th:text="${roomUtilization.stream().mapToInt(util -> util.totalHours).sum()}">0</h4>
+                    <p class="mb-0">Gesamtstunden</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-warning text-white">
+                <div class="card-body">
+                    <i class="bi bi-percent fs-1"></i>
+                    <h4 th:text="${T(java.text.DecimalFormat).new('#.#').format(roomUtilization.stream().mapToDouble(util -> util.utilizationPercentage).average().orElse(0))}">0</h4>
+                    <p class="mb-0">∅ Auslastung</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-info text-white">
+                <div class="card-body">
+                    <i class="bi bi-calendar-event fs-1"></i>
+                    <h4 th:text="${roomUtilization.stream().mapToInt(util -> util.totalEntries).sum()}">0</h4>
+                    <p class="mb-0">Termine gesamt</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Room Utilization Cards -->
+    <div th:if="${roomUtilization && !roomUtilization.empty}">
+        <div class="row">
+            <div th:each="util : ${roomUtilization}" class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0" th:text="${util.room.name}">Raum ABC-123</h6>
+                        <span class="badge"
+                              th:text="${T(java.text.DecimalFormat).new('#.#').format(util.utilizationPercentage)} + '%'"
+                              th:classappend="${util.utilizationPercentage >= 80} ? 'bg-danger' :
+                                             ${util.utilizationPercentage >= 60} ? 'bg-warning' :
+                                             ${util.utilizationPercentage >= 40} ? 'bg-success' : 'bg-secondary'">75%</span>
+                    </div>
+                    <div class="card-body">
+                        <!-- Room Details -->
+                        <div class="mb-3">
+                            <small class="text-muted">
+                                <i class="bi bi-geo-alt"></i> <span th:text="${util.room.building ?: 'Unbekannt'}">Gebäude</span>
+                                <span th:if="${util.room.capacity}">
+                                    • <i class="bi bi-people"></i> <span th:text="${util.room.capacity}">50</span> Plätze
+                                </span>
+                            </small>
+                        </div>
+                        
+                        <!-- Utilization Progress Bar -->
+                        <div class="progress mb-3" style="height: 10px;">
+                            <div class="progress-bar" 
+                                 role="progressbar" 
+                                 th:style="'width: ' + ${util.utilizationPercentage} + '%'"
+                                 th:classappend="${util.utilizationPercentage >= 80} ? 'bg-danger' :
+                                               ${util.utilizationPercentage >= 60} ? 'bg-warning' :
+                                               ${util.utilizationPercentage >= 40} ? 'bg-success' : 'bg-info'"></div>
+                        </div>
+                        
+                        <!-- Statistics -->
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <small class="text-muted d-block">Termine</small>
+                                <strong th:text="${util.totalEntries}">15</strong>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted d-block">Stunden</small>
+                                <strong th:text="${util.totalHours}">30</strong>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted d-block">Kurse</small>
+                                <strong th:text="${util.uniqueCourses}">8</strong>
+                            </div>
+                        </div>
+                        
+                        <!-- Peak Times -->
+                        <div class="mt-3" th:if="${util.peakHours && !util.peakHours.empty}">
+                            <small class="text-muted d-block mb-1">Hauptbelegungszeiten:</small>
+                            <div class="d-flex flex-wrap gap-1">
+                                <span th:each="hour : ${util.peakHours}" 
+                                      class="badge bg-light text-dark" 
+                                      th:text="${hour} + ':00'">08:00</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Most Used Day -->
+                        <div class="mt-2" th:if="${util.mostUsedDay}">
+                            <small class="text-muted">
+                                Meist genutzt: <strong th:text="${util.mostUsedDay}">Montag</strong>
+                            </small>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="d-flex justify-content-between">
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    th:onclick="'showRoomDetails(' + ${util.room.id} + ')'">
+                                <i class="bi bi-eye"></i> Details
+                            </button>
+                            <a th:href="@{/schedule/room/{id}(id=${util.room.id}, semester=${semester?.id})}" 
+                               class="btn btn-sm btn-primary">
+                                <i class="bi bi-calendar"></i> Belegung
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Utilization Chart -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-bar-chart"></i> Auslastung nach Wochentag</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="utilizationChart" width="400" height="100"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Empty State -->
+    <div th:unless="${roomUtilization && !roomUtilization.empty}" class="text-center mt-5">
+        <i class="bi bi-building-x display-1 text-muted"></i>
+        <h4 class="text-muted mt-3">Keine Raumauslastung vorhanden</h4>
+        <p class="text-muted">
+            <span th:if="${semester}">Für das Semester '<span th:text="${semester.shortName}">WS24</span>' </span>
+            sind keine Raumbelegungen vorhanden.
+        </p>
+        <div class="mt-3">
+            <a th:href="@{/data/scraping}" class="btn btn-primary me-2">
+                <i class="bi bi-download"></i> Daten laden
+            </a>
+            <a th:href="@{/schedule}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Zurück zur Übersicht
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Room Details Modal -->
+<div class="modal fade" id="roomDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Raumdetails</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="roomDetailsContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2">Lade Raumdetails...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script th:if="${roomUtilization && !roomUtilization.empty}">
+// Chart initialization
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('utilizationChart').getContext('2d');
+    
+    // Prepare data from Thymeleaf
+    const roomNames = /*[[${roomUtilization.![room.name]}]]*/ [];
+    const utilizationData = /*[[${roomUtilization.![utilizationPercentage]}]]*/ [];
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: roomNames,
+            datasets: [{
+                label: 'Auslastung (%)',
+                data: utilizationData,
+                backgroundColor: function(context) {
+                    const value = context.parsed.y;
+                    if (value >= 80) return 'rgba(220, 53, 69, 0.8)';
+                    if (value >= 60) return 'rgba(255, 193, 7, 0.8)';
+                    if (value >= 40) return 'rgba(25, 135, 84, 0.8)';
+                    return 'rgba(108, 117, 125, 0.8)';
+                },
+                borderColor: function(context) {
+                    const value = context.parsed.y;
+                    if (value >= 80) return 'rgb(220, 53, 69)';
+                    if (value >= 60) return 'rgb(255, 193, 7)';
+                    if (value >= 40) return 'rgb(25, 135, 84)';
+                    return 'rgb(108, 117, 125)';
+                },
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                },
+                x: {
+                    ticks: {
+                        maxRotation: 45
+                    }
+                }
+            }
+        }
+    });
+});
+
+function showRoomDetails(roomId) {
+    const modal = new bootstrap.Modal(document.getElementById('roomDetailsModal'));
+    modal.show();
+    
+    // Load room details via AJAX
+    fetch(`/api/rooms/${roomId}/details`)
+        .then(response => response.text())
+        .then(html => {
+            document.getElementById('roomDetailsContent').innerHTML = html;
+        })
+        .catch(error => {
+            document.getElementById('roomDetailsContent').innerHTML = 
+                '<div class="alert alert-danger">Fehler beim Laden der Raumdetails</div>';
+        });
+}
+</script>
+</body>
+</html>

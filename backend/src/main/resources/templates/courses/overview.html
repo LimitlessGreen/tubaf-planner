@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout/base :: layout(~{::title}, ~{::content})}">
+<head>
+    <title>Kurse</title>
+</head>
+<body>
+    <div th:fragment="content">
+        <div class="container-fluid py-4">
+            <!-- Header -->
+            <div class="row">
+                <div class="col-md-8">
+                    <h1 class="h2 mb-4">
+                        <i class="fas fa-book me-2"></i>Kurse
+                    </h1>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#filterModal">
+                        <i class="fas fa-filter me-1"></i>Filter
+                    </button>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div class="row mb-4">
+                <div class="col-md-3 mb-2">
+                    <div class="card border-primary">
+                        <div class="card-body text-center">
+                            <h5 class="text-primary" th:text="${totalCourses ?: '0'}">0</h5>
+                            <small class="text-muted">Kurse gesamt</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-2">
+                    <div class="card border-success">
+                        <div class="card-body text-center">
+                            <h5 class="text-success" th:text="${coursesByType.get('V') ?: '0'}">0</h5>
+                            <small class="text-muted">Vorlesungen</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-2">
+                    <div class="card border-warning">
+                        <div class="card-body text-center">
+                            <h5 class="text-warning" th:text="${coursesByType.get('U') ?: '0'}">0</h5>
+                            <small class="text-muted">Übungen</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-2">
+                    <div class="card border-info">
+                        <div class="card-body text-center">
+                            <h5 class="text-info" th:text="${coursesByType.get('P') ?: '0'}">0</h5>
+                            <small class="text-muted">Praktika</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Course List -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Kursliste</h5>
+                                <small class="text-muted" th:if="${currentSemester}" 
+                                       th:text="'Semester: ' + ${currentSemester.shortName}"></small>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div th:if="${courses.empty}" class="text-center py-5">
+                                <i class="fas fa-book text-muted fa-3x mb-3"></i>
+                                <p class="text-muted">Keine Kurse verfügbar.</p>
+                                <a th:href="@{/data/scraping}" class="btn btn-primary">
+                                    <i class="fas fa-download me-1"></i>Daten laden
+                                </a>
+                            </div>
+                            
+                            <div th:unless="${courses.empty}" class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>Code</th>
+                                            <th>Name</th>
+                                            <th>Typ</th>
+                                            <th>SWS</th>
+                                            <th>Dozent</th>
+                                            <th>Semester</th>
+                                            <th>Aktionen</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr th:each="course : ${courses}">
+                                            <td>
+                                                <code th:text="${course.courseCode}">CODE</code>
+                                            </td>
+                                            <td>
+                                                <strong th:text="${course.name}">Course Name</strong>
+                                                <br><small class="text-muted" th:text="${course.description}">Description</small>
+                                            </td>
+                                            <td>
+                                                <span class="badge" 
+                                                      th:class="'badge bg-' + (${course.courseType} == 'V' ? 'primary' : 
+                                                                                ${course.courseType} == 'U' ? 'warning' : 
+                                                                                ${course.courseType} == 'P' ? 'info' : 
+                                                                                ${course.courseType} == 'S' ? 'success' : 'secondary')"
+                                                      th:text="${course.courseType}">Type</span>
+                                            </td>
+                                            <td th:text="${course.creditHours}">0</td>
+                                            <td>
+                                                <span th:if="${course.instructor}" th:text="${course.instructor}">Instructor</span>
+                                                <span th:unless="${course.instructor}" class="text-muted">Nicht zugeordnet</span>
+                                            </td>
+                                            <td>
+                                                <span th:if="${course.semester}" 
+                                                      class="badge bg-secondary" 
+                                                      th:text="${course.semester.shortName}">Semester</span>
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm">
+                                                    <a th:href="@{/courses/{id}(id=${course.id})}" 
+                                                       class="btn btn-outline-primary">
+                                                        <i class="fas fa-eye"></i>
+                                                    </a>
+                                                    <a th:href="@{/schedule/course/{id}(id=${course.id})}" 
+                                                       class="btn btn-outline-success">
+                                                        <i class="fas fa-calendar"></i>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Modal -->
+        <div class="modal fade" id="filterModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Filter</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form th:action="@{/courses}" method="get">
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label for="semesterFilter" class="form-label">Semester</label>
+                                <select class="form-select" name="semesterId" id="semesterFilter">
+                                    <option value="">Alle Semester</option>
+                                    <option th:each="semester : ${semesters}" 
+                                            th:value="${semester.id}" 
+                                            th:text="${semester.name}"
+                                            th:selected="${param.semesterId != null and param.semesterId[0] == semester.id.toString()}">Semester</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="typeFilter" class="form-label">Kurstyp</label>
+                                <select class="form-select" name="courseType" id="typeFilter">
+                                    <option value="">Alle Typen</option>
+                                    <option value="V" th:selected="${param.courseType != null and param.courseType[0] == 'V'}">Vorlesung</option>
+                                    <option value="U" th:selected="${param.courseType != null and param.courseType[0] == 'U'}">Übung</option>
+                                    <option value="P" th:selected="${param.courseType != null and param.courseType[0] == 'P'}">Praktikum</option>
+                                    <option value="S" th:selected="${param.courseType != null and param.courseType[0] == 'S'}">Seminar</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="searchFilter" class="form-label">Suche</label>
+                                <input type="text" class="form-control" name="search" id="searchFilter" 
+                                       placeholder="Name oder Code" th:value="${param.search != null ? param.search[0] : ''}">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                            <button type="submit" class="btn btn-primary">Filter anwenden</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
