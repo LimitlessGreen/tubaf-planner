@@ -25,7 +25,9 @@ class ScrapingJsonReportTest {
     private lateinit var baseUrl: String
 
     private val objectMapper =
-        jacksonObjectMapper().registerModule(JavaTimeModule()).disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+        jacksonObjectMapper()
+            .registerModule(JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 
     @Test
     fun generateScrapingReport() {
@@ -35,12 +37,13 @@ class ScrapingJsonReportTest {
 
         semesters.forEach { semester ->
             val start = Instant.now()
-            val semesterReport = mutableMapOf<String, Any?>(
-                "id" to semester.id,
-                "name" to semester.name,
-                "shortName" to semester.shortName,
-                "startedAt" to start,
-            )
+            val semesterReport =
+                mutableMapOf<String, Any?>(
+                    "id" to semester.id,
+                    "name" to semester.name,
+                    "shortName" to semester.shortName,
+                    "startedAt" to start,
+                )
 
             try {
                 val result = tubafScrapingService.scrapeSemesterData(semester)
