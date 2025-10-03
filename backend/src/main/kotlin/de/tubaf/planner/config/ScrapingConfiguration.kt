@@ -15,6 +15,25 @@ class ScrapingConfiguration {
     var respectfulDelay: Long = 500
     var headless: Boolean = true
 
+    // Parallelisierungs-Optionen
+    // Aktiviert die parallele Verarbeitung der Studiengänge innerhalb eines Semesters
+    var parallelEnabled: Boolean = false
+    // Maximale Anzahl gleichzeitiger Worker (Programme), begrenzt durch Session-Pool Größe
+    var parallelMaxWorkers: Int = 4
+    // Anzahl vorgehaltener HTTP Sessions (Cookies) die zyklisch wiederverwendet werden
+    var parallelSessionPoolSize: Int = 2
+    // Optionale kurze Pause (ms) zwischen abgeschlossenen Tasks um Server nicht zu fluten
+    var parallelInterTaskDelay: Long = 150
+
+    /*
+     * Hinweise zur Parallelisierung (Variante B – Session Pool):
+     * - Jede Session erzeugt eine eigene Cookie-Jar / PHP Session auf dem Remote-System.
+     * - Ein Worker belegt kurzfristig eine freie Session, führt den Program-Scrape aus und gibt sie frei.
+     * - Damit werden nicht unnötig viele Sessions aufgebaut; gleichzeitige Requests bleiben kontrollierbar.
+     * - Empfohlene Relation: parallelMaxWorkers >= parallelSessionPoolSize.
+     * - Wenn parallelEnabled=false bleibt Verhalten identisch zur sequentiellen Verarbeitung.
+     */
+
     // Study program mappings for TUBAF
     var studyProgramMappings: Map<String, StudyProgramMapping> =
         mapOf(

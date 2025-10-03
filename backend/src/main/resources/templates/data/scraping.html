@@ -250,6 +250,31 @@
                             </h5>
                         </div>
                         <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">
+                                    <i class="fas fa-bolt me-1 text-warning"></i>Parallelisierung
+                                </label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="parallelEnabled" onchange="updateConfigDebounced()">
+                                    <label class="form-check-label" for="parallelEnabled">Parallel aktivieren</label>
+                                </div>
+                                <div id="parallelConfigFields" class="row g-2 mt-2" style="display:none;">
+                                    <div class="col-6">
+                                        <label class="form-label small mb-0">Worker</label>
+                                        <input type="number" min="1" max="32" class="form-control" id="parallelMaxWorkers" onchange="updateConfigDebounced()">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small mb-0">Sessions</label>
+                                        <input type="number" min="1" max="32" class="form-control" id="parallelSessionPoolSize" onchange="updateConfigDebounced()">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small mb-0">Delay (ms)</label>
+                                        <input type="number" min="0" class="form-control" id="parallelInterTaskDelay" onchange="updateConfigDebounced()">
+                                    </div>
+                                </div>
+                                <small class="text-muted d-block mt-1" id="parallelStatusHint"></small>
+                                <hr>
+                            </div>
                             <div class="mode-card card mb-3 active" id="modeDiscovery" onclick="selectMode('discovery')">
                                 <div class="card-body">
                                     <div class="d-flex align-items-center">
@@ -336,22 +361,32 @@
                         </div>
                         <div class="card-body">
                             <div class="row">
-                                <div class="col-md-4 text-center">
-                                    <!-- Circular Progress -->
-                                    <svg class="progress-ring" viewBox="0 0 120 120">
-                                        <circle class="progress-ring-circle" cx="60" cy="60" r="54"></circle>
-                                        <circle id="progressRingValue" class="progress-ring-value" cx="60" cy="60" r="54" 
-                                                stroke-dasharray="339.292" stroke-dashoffset="339.292"></circle>
-                                    </svg>
-                                    <div class="mt-2">
-                                        <h3 class="mb-0" id="progressPercent">0%</h3>
-                                        <small class="text-muted">Abgeschlossen</small>
-                                    </div>
-                                </div>
-                                <div class="col-md-8">
+                                <div class="col-12">
                                     <div class="mb-4">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <label class="form-label text-muted small mb-0">Gesamtfortschritt</label>
+                                            <span class="small text-muted" id="overallPercent">0%</span>
+                                        </div>
+                                        <div class="progress mb-3" style="height:14px;">
+                                            <div id="overallProgressBar" class="progress-bar bg-primary" role="progressbar" style="width:0%;"></div>
+                                        </div>
                                         <label class="form-label text-muted small">Aktuelle Aufgabe</label>
-                                        <div id="currentTask" class="h5">Bereit zum Scrapen</div>
+                                        <div id="currentTask" class="h5 mb-2">Bereit zum Scrapen</div>
+                                        <div class="table-responsive" style="max-height:260px; overflow-y:auto;">
+                                            <table class="table table-sm align-middle mb-0" id="subTasksTable">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th style="width:28%;">Semester</th>
+                                                        <th style="width:14%;" class="text-end">Fortschritt</th>
+                                                        <th style="width:34%;">Balken</th>
+                                                        <th style="width:24%;">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="subTasksBody">
+                                                    <tr id="noSubtasksRow"><td colspan="4" class="text-muted small">Noch keine Teilaufgaben – starte einen Lauf.</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
                                     
                                     <div class="row g-3">
@@ -424,6 +459,49 @@
         </div>
 
         <script>
+        // ---- Parallel Config Handling ----
+        let configUpdateTimer = null;
+        async function loadConfig() {
+            try {
+                const resp = await fetch('/api/scraping/config');
+                if (!resp.ok) return;
+                const cfg = await resp.json();
+                document.getElementById('parallelEnabled').checked = cfg.parallelEnabled;
+                document.getElementById('parallelMaxWorkers').value = cfg.parallelMaxWorkers;
+                document.getElementById('parallelSessionPoolSize').value = cfg.parallelSessionPoolSize;
+                document.getElementById('parallelInterTaskDelay').value = cfg.parallelInterTaskDelay;
+                reflectParallelState();
+            } catch(e) { console.warn('Config load failed', e); }
+        }
+        function reflectParallelState() {
+            const enabled = document.getElementById('parallelEnabled').checked;
+            document.getElementById('parallelConfigFields').style.display = enabled ? 'flex' : 'none';
+            document.getElementById('parallelStatusHint').textContent = enabled ? 'Parallelmodus aktiv – Programme werden gleichzeitig verarbeitet.' : 'Sequentieller Modus – ein Studiengang nach dem anderen.';
+        }
+        async function updateConfig() {
+            const payload = {
+                parallelEnabled: document.getElementById('parallelEnabled').checked,
+                parallelMaxWorkers: parseInt(document.getElementById('parallelMaxWorkers').value || '1'),
+                parallelSessionPoolSize: parseInt(document.getElementById('parallelSessionPoolSize').value || '1'),
+                parallelInterTaskDelay: parseInt(document.getElementById('parallelInterTaskDelay').value || '0')
+            };
+            try {
+                const resp = await fetch('/api/scraping/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!resp.ok) {
+                    addLog('error', 'Konfig konnte nicht gespeichert werden');
+                } else {
+                    const saved = await resp.json();
+                    addLog('info', 'Konfiguration aktualisiert: Parallel=' + saved.parallelEnabled + ', Worker=' + saved.parallelMaxWorkers);
+                }
+                reflectParallelState();
+            } catch(e) { addLog('error', 'Fehler beim Speichern der Konfiguration'); }
+        }
+        function updateConfigDebounced() {
+            reflectParallelState();
+            if (configUpdateTimer) clearTimeout(configUpdateTimer);
+            configUpdateTimer = setTimeout(updateConfig, 400);
+        }
+        // ---- Ende Parallel Config ----
         let refreshInterval = null;
         let startTime = null;
         let elapsedTimer = null;
@@ -550,28 +628,53 @@
             }
         }
         
-        // Update Progress
-        function updateProgress(data) {
-            if (!data) return;
-            
-            const progress = data.progress || 0;
-            updateCircularProgress(progress);
-            document.getElementById('progressPercent').textContent = Math.round(progress) + '%';
-            
+        function renderSubTasks(subTasks){
+            const body = document.getElementById('subTasksBody');
+            if(!body) return;
+            body.innerHTML='';
+            if(!subTasks || subTasks.length===0){
+                body.innerHTML='<tr id="noSubtasksRow"><td colspan="4" class="text-muted small">Noch keine Teilaufgaben – starte einen Lauf.</td></tr>';
+                return;
+            }
+            subTasks.forEach(st=>{
+                const percent = st.progress || 0;
+                const status = (st.status||'idle');
+                const badge = {
+                    completed:'<span class="badge bg-success">fertig</span>',
+                    failed:'<span class="badge bg-danger">fehler</span>',
+                    running:'<span class="badge bg-primary">läuft</span>',
+                    paused:'<span class="badge bg-warning text-dark">pausiert</span>',
+                    idle:'<span class="badge bg-secondary">idle</span>'
+                }[status] || '<span class="badge bg-secondary">'+status+'</span>';
+                const barClass = percent===100 ? 'bg-success' : 'bg-info';
+                const msg = st.message ? '<div class="small text-muted">'+escapeHtml(st.message)+'</div>' : '';
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="fw-semibold text-truncate" title="${escapeHtml(st.label||st.id)}">${escapeHtml(st.label||st.id)}</td>
+                    <td class="text-end"><span class="small">${percent}%</span></td>
+                    <td>
+                        <div class="progress" style="height:10px;">
+                            <div class="progress-bar ${barClass}" role="progressbar" style="width:${percent}%;" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </td>
+                    <td>${badge}${msg}</td>`;
+                body.appendChild(tr);
+            });
+        }
+
+        function updateProgress(data){
+            if(!data) return;
+            const overall = data.progress || 0;
+            const bar = document.getElementById('overallProgressBar');
+            if(bar) bar.style.width = overall + '%';
+            const pct = document.getElementById('overallPercent');
+            if(pct) pct.textContent = overall + '%';
             document.getElementById('currentTask').textContent = data.message || data.currentTask || 'Bereit';
             document.getElementById('processedCount').textContent = data.processedCount || 0;
             document.getElementById('totalCount').textContent = data.totalCount || 0;
             document.getElementById('newEntries').textContent = data.newEntries || 0;
             document.getElementById('updatedEntries').textContent = data.updatedEntries || 0;
-        }
-        
-        // Update Circular Progress
-        function updateCircularProgress(percent) {
-            const circle = document.getElementById('progressRingValue');
-            const radius = 54;
-            const circumference = 2 * Math.PI * radius;
-            const offset = circumference - (percent / 100) * circumference;
-            circle.style.strokeDashoffset = offset;
+            if(data.subTasks){ renderSubTasks(data.subTasks); }
         }
         
         // Update Status Indicator
@@ -742,6 +845,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             refreshStatus();
             loadAvailableSemesters();
+            loadConfig();
             
             document.getElementById('autoRefresh').addEventListener('change', function() {
                 if (this.checked) {
