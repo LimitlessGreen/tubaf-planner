@@ -866,13 +866,105 @@ open class TubafScrapingService(
     }
 
     private fun getOrCreateLecturer(rawText: String, scrapingRunId: Long): Lecturer {
-        val text = rawText.trim().ifBlank { "N.N." }
-        lecturerRepository.findByNameContainingIgnoreCaseAndActive(text).firstOrNull()?.let { return it }
+        val parsed = parseLecturerIdentity(rawText)
+        // Primäre Suche nach Name (bestehendes Verhalten, tolerant bzgl. Groß/Kleinschreibung)
+        lecturerRepository.findByNameContainingIgnoreCaseAndActive(parsed.name).firstOrNull()?.let { existing ->
+            // Falls Email neu und im Datensatz fehlt: aktualisieren
+            val needsEmailUpdate = parsed.email != null && existing.email.isNullOrBlank()
+            if (needsEmailUpdate) {
+                existing.email = parsed.email
+                lecturerRepository.save(existing)
+            }
+            return existing
+        }
 
-        val lecturer = Lecturer(name = text)
+        val lecturer = Lecturer(name = parsed.name, email = parsed.email)
         val saved = lecturerRepository.save(lecturer)
         changeTrackingService.logEntityCreated(scrapingRunId, "Lecturer", saved.id!!)
+        if (parsed.modified || parsed.truncated) {
+            val flags = buildList {
+                if (parsed.modified) add("normalized")
+                if (parsed.truncated) add("truncated")
+                if (parsed.email != null) add("email-extracted")
+            }.joinToString(",")
+            logger.info("Lecturer sanitized [{}]: raw='{}' -> name='{}' email='{}'", flags, rawText.take(120), parsed.name, parsed.email)
+        }
         return saved
+    }
+
+    private data class ParsedLecturer(val name: String, val email: String?, val modified: Boolean, val truncated: Boolean)
+
+    private fun parseLecturerIdentity(raw: String): ParsedLecturer {
+        val original = raw
+        var value = raw.trim()
+        var email: String? = null
+        var modified = false
+        var truncated = false
+
+        if (value.isBlank()) {
+            return ParsedLecturer(name = "N.N.", email = null, modified = original != "N.N.", truncated = false)
+        }
+
+        // Collapse whitespace
+        val collapsed = Regex("\\s+").replace(value.replace('\n', ' ').replace('\r', ' '), " ")
+        if (collapsed != value) {
+            value = collapsed
+            modified = true
+        }
+
+        // Extract email (first occurrence) if present
+        val emailRegex = Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE)
+        val emailMatch = emailRegex.find(value)
+        if (emailMatch != null) {
+            email = emailMatch.value.lowercase()
+            // Remove surrounding constructs like <email> or (email)
+            val before = value.substring(0, emailMatch.range.first)
+            val after = value.substring(emailMatch.range.last + 1)
+            value = (before + after)
+                .replace("<", " ")
+                .replace(">", " ")
+                .replace("(", " ")
+                .replace(")", " ")
+                .trim()
+            modified = true
+        }
+
+        // Strip leading/trailing punctuation
+        val stripped = value.trim { it == '-' || it == ';' || it == ',' || it.isWhitespace() }
+        if (stripped != value) {
+            value = stripped
+            modified = true
+        }
+
+        // Long multi-part names: keep only first segment by delimiters if exceedingly long (>200)
+        if (value.length > 200) {
+            for (d in listOf(';', '/', '|')) {
+                if (value.contains(d)) {
+                    val first = value.split(d).first().trim()
+                    if (first.isNotBlank()) {
+                        value = first
+                        truncated = true
+                        modified = true
+                        break
+                    }
+                }
+            }
+        }
+
+        if (value.length > 200) {
+            value = value.take(200)
+            truncated = true
+        }
+
+        if (value.isBlank()) value = "N.N."
+
+        // Ensure email length constraint (150)
+        if (email != null && email.length > 150) {
+            email = email.take(150)
+            truncated = true
+        }
+
+        return ParsedLecturer(name = value, email = email, modified = modified, truncated = truncated)
     }
 
     private fun getOrCreateRoom(rawText: String, scrapingRunId: Long): Room {
