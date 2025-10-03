@@ -16,24 +16,17 @@ class ChangeLog(
     @Column(name = "field_name", length = 100) var fieldName: String? = null,
     @Column(name = "old_value", columnDefinition = "TEXT") var oldValue: String? = null,
     @Column(name = "new_value", columnDefinition = "TEXT") var newValue: String? = null,
-    @Column(name = "description", columnDefinition = "TEXT") var description: String? = null
+    @Column(name = "description", columnDefinition = "TEXT") var description: String? = null,
 ) : BaseEntity() {
 
     companion object {
-        fun created(
-            scrapingRun: ScrapingRun,
-            entityType: String,
-            entityId: Long,
-            description: String? = null
-        ): ChangeLog {
-            return ChangeLog(
-                scrapingRun = scrapingRun,
-                entityType = entityType,
-                entityId = entityId,
-                changeType = ChangeType.CREATED,
-                description = description
-            )
-        }
+        fun created(scrapingRun: ScrapingRun, entityType: String, entityId: Long, description: String? = null): ChangeLog = ChangeLog(
+            scrapingRun = scrapingRun,
+            entityType = entityType,
+            entityId = entityId,
+            changeType = ChangeType.CREATED,
+            description = description,
+        )
 
         fun updated(
             scrapingRun: ScrapingRun,
@@ -41,42 +34,31 @@ class ChangeLog(
             entityId: Long,
             fieldName: String,
             oldValue: String?,
-            newValue: String?
-        ): ChangeLog {
-            return ChangeLog(
-                scrapingRun = scrapingRun,
-                entityType = entityType,
-                entityId = entityId,
-                changeType = ChangeType.UPDATED,
-                fieldName = fieldName,
-                oldValue = oldValue,
-                newValue = newValue
-            )
-        }
+            newValue: String?,
+        ): ChangeLog = ChangeLog(
+            scrapingRun = scrapingRun,
+            entityType = entityType,
+            entityId = entityId,
+            changeType = ChangeType.UPDATED,
+            fieldName = fieldName,
+            oldValue = oldValue,
+            newValue = newValue,
+        )
 
-        fun deleted(
-            scrapingRun: ScrapingRun,
-            entityType: String,
-            entityId: Long,
-            description: String? = null
-        ): ChangeLog {
-            return ChangeLog(
-                scrapingRun = scrapingRun,
-                entityType = entityType,
-                entityId = entityId,
-                changeType = ChangeType.DELETED,
-                description = description
-            )
-        }
+        fun deleted(scrapingRun: ScrapingRun, entityType: String, entityId: Long, description: String? = null): ChangeLog = ChangeLog(
+            scrapingRun = scrapingRun,
+            entityType = entityType,
+            entityId = entityId,
+            changeType = ChangeType.DELETED,
+            description = description,
+        )
     }
 
-    override fun toString(): String {
-        return "ChangeLog(id=$id, entityType='$entityType', entityId=$entityId, changeType=$changeType)"
-    }
+    override fun toString(): String = "ChangeLog(id=$id, entityType='$entityType', entityId=$entityId, changeType=$changeType)"
 }
 
 enum class ChangeType {
     CREATED,
     UPDATED,
-    DELETED
+    DELETED,
 }

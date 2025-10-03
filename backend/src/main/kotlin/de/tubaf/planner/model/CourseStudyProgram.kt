@@ -5,7 +5,7 @@ import jakarta.persistence.*
 @Entity
 @Table(
     name = "course_study_programs",
-    uniqueConstraints = [UniqueConstraint(columnNames = ["course_id", "study_program_id"])]
+    uniqueConstraints = [UniqueConstraint(columnNames = ["course_id", "study_program_id"])],
 )
 class CourseStudyProgram(
     @ManyToOne(fetch = FetchType.LAZY)
@@ -14,7 +14,7 @@ class CourseStudyProgram(
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "study_program_id", nullable = false)
     var studyProgram: StudyProgram,
-    @Column(name = "semester") var semester: Int? = null
+    @Column(name = "semester") var semester: Int? = null,
 ) : BaseEntity() {
 
     override fun equals(other: Any?): Boolean {
@@ -30,7 +30,5 @@ class CourseStudyProgram(
         return result
     }
 
-    override fun toString(): String {
-        return "CourseStudyProgram(course=${course.name}, studyProgram=${studyProgram.code}, semester=$semester)"
-    }
+    override fun toString(): String = "CourseStudyProgram(course=${course.name}, studyProgram=${studyProgram.code}, semester=$semester)"
 }

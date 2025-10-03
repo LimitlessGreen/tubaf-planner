@@ -12,12 +12,7 @@ import org.springframework.transaction.annotation.Transactional
 class StudyProgramService(private val studyProgramRepository: StudyProgramRepository) {
 
     /** Erstellt einen neuen Studiengang */
-    fun createStudyProgram(
-        code: String,
-        name: String,
-        degreeType: DegreeType,
-        facultyId: Int? = null
-    ): StudyProgram {
+    fun createStudyProgram(code: String, name: String, degreeType: DegreeType, facultyId: Int? = null): StudyProgram {
         // Prüfe auf doppelten Code
         studyProgramRepository.findByCode(code)?.let {
             throw IllegalArgumentException("StudyProgram with code '$code' already exists")
@@ -31,27 +26,20 @@ class StudyProgramService(private val studyProgramRepository: StudyProgramReposi
 
     /** Gibt alle aktiven Studiengänge zurück */
     @Transactional(readOnly = true)
-    fun getActiveStudyPrograms(): List<StudyProgram> {
-        return studyProgramRepository.findByActive(true)
-    }
+    fun getActiveStudyPrograms(): List<StudyProgram> = studyProgramRepository.findByActive(true)
 
     /** Gibt Studiengänge nach Degree Type zurück */
     @Transactional(readOnly = true)
-    fun getStudyProgramsByDegreeType(degreeType: DegreeType): List<StudyProgram> {
-        return studyProgramRepository.findByDegreeTypeAndActive(degreeType, true)
-    }
+    fun getStudyProgramsByDegreeType(degreeType: DegreeType): List<StudyProgram> =
+        studyProgramRepository.findByDegreeTypeAndActive(degreeType, true)
 
     /** Sucht Studiengänge nach Namen */
     @Transactional(readOnly = true)
-    fun searchStudyPrograms(searchTerm: String): List<StudyProgram> {
-        return studyProgramRepository.findByNameContainingIgnoreCase(searchTerm)
-    }
+    fun searchStudyPrograms(searchTerm: String): List<StudyProgram> = studyProgramRepository.findByNameContainingIgnoreCase(searchTerm)
 
     /** Gibt Studiengänge für ein Semester zurück */
     @Transactional(readOnly = true)
-    fun getStudyProgramsBySemester(semesterId: Long): List<StudyProgram> {
-        return studyProgramRepository.findBySemesterIdAndActive(semesterId)
-    }
+    fun getStudyProgramsBySemester(semesterId: Long): List<StudyProgram> = studyProgramRepository.findBySemesterIdAndActive(semesterId)
 
     /** Aktiviert oder deaktiviert einen Studiengang */
     fun setStudyProgramActive(studyProgramId: Long, active: Boolean): StudyProgram {
@@ -97,7 +85,7 @@ class StudyProgramService(private val studyProgramRepository: StudyProgramReposi
             totalPrograms = all.size,
             activePrograms = active.size,
             inactivePrograms = all.size - active.size,
-            programsByDegreeType = byDegreeType.mapValues { it.value.size }
+            programsByDegreeType = byDegreeType.mapValues { it.value.size },
         )
     }
 }
@@ -108,7 +96,7 @@ data class StudyProgramUpdateRequest(
     val name: String? = null,
     val degreeType: DegreeType? = null,
     val facultyId: Int? = null,
-    val active: Boolean? = null
+    val active: Boolean? = null,
 )
 
 /** Statistiken für Studiengänge */
@@ -116,5 +104,5 @@ data class StudyProgramStatistics(
     val totalPrograms: Int,
     val activePrograms: Int,
     val inactivePrograms: Int,
-    val programsByDegreeType: Map<DegreeType, Int>
+    val programsByDegreeType: Map<DegreeType, Int>,
 )

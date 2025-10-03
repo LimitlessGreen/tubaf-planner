@@ -20,9 +20,8 @@ class SemesterApiController(private val semesterService: SemesterService) {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get semester by ID")
-    fun getSemesterById(@PathVariable id: Long) =
-        semesterService.getAllSemesters().find { it.id == id }
-            ?: throw IllegalArgumentException("Semester not found")
+    fun getSemesterById(@PathVariable id: Long) = semesterService.getAllSemesters().find { it.id == id }
+        ?: throw IllegalArgumentException("Semester not found")
 
     @PostMapping("/{id}/activate")
     @Operation(summary = "Activate semester")

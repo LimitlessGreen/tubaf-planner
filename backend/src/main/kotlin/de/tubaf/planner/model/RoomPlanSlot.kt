@@ -16,20 +16,20 @@ import java.time.LocalTime
 @Table(
     name = "room_plan_slots",
     uniqueConstraints =
-        [
-            UniqueConstraint(
-                name = "uk_room_plan_slot",
-                columnNames =
-                    [
-                        "room_id",
-                        "semester_id",
-                        "day_of_week",
-                        "start_time",
-                        "end_time",
-                        "course_title",
-                    ]
-            ),
-        ]
+    [
+        UniqueConstraint(
+            name = "uk_room_plan_slot",
+            columnNames =
+            [
+                "room_id",
+                "semester_id",
+                "day_of_week",
+                "start_time",
+                "end_time",
+                "course_title",
+            ],
+        ),
+    ],
 )
 class RoomPlanSlot(
     @ManyToOne(fetch = FetchType.LAZY)

@@ -13,7 +13,7 @@ class ScrapingErrorHandler {
         operation: () -> T,
         maxRetries: Int = 3,
         retryDelay: Long = 1000,
-        operationName: String = "Scraping operation"
+        operationName: String = "Scraping operation",
     ): T {
         var lastException: Exception? = null
 
@@ -40,18 +40,15 @@ class ScrapingErrorHandler {
     }
 
     /** Prüft ob eine Exception als wiederholbar eingestuft werden kann */
-    fun isRetryableException(exception: Exception): Boolean {
-        return when {
-            exception.message?.contains("timeout", ignoreCase = true) == true -> true
-            exception.message?.contains("connection", ignoreCase = true) == true -> true
-            exception.message?.contains("network", ignoreCase = true) == true -> true
-            exception is java.net.SocketTimeoutException -> true
-            exception is java.net.ConnectException -> true
-            else -> false
-        }
+    fun isRetryableException(exception: Exception): Boolean = when {
+        exception.message?.contains("timeout", ignoreCase = true) == true -> true
+        exception.message?.contains("connection", ignoreCase = true) == true -> true
+        exception.message?.contains("network", ignoreCase = true) == true -> true
+        exception is java.net.SocketTimeoutException -> true
+        exception is java.net.ConnectException -> true
+        else -> false
     }
 }
 
 /** Custom Exception für Scraping-Fehler */
-class ScrapingException(message: String, cause: Throwable? = null) :
-    RuntimeException(message, cause)
+class ScrapingException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)

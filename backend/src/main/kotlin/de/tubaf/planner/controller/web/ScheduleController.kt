@@ -1,10 +1,10 @@
 package de.tubaf.planner.controller.web
 
 import de.tubaf.planner.service.*
-import java.time.DayOfWeek
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.*
+import java.time.DayOfWeek
 
 @Controller
 @RequestMapping("/schedule")
@@ -12,7 +12,7 @@ class ScheduleController(
     private val scheduleService: ScheduleService,
     private val semesterService: SemesterService,
     private val studyProgramService: StudyProgramService,
-    private val roomService: RoomService
+    private val roomService: RoomService,
 ) {
 
     @GetMapping
@@ -23,11 +23,7 @@ class ScheduleController(
     }
 
     @GetMapping("/semester/{semesterId}")
-    fun semesterSchedule(
-        @PathVariable semesterId: Long,
-        @RequestParam(required = false) studyProgramId: Long?,
-        model: Model
-    ): String {
+    fun semesterSchedule(@PathVariable semesterId: Long, @RequestParam(required = false) studyProgramId: Long?, model: Model): String {
         val semester =
             semesterService.getAllSemesters().find { it.id == semesterId }
                 ?: return "redirect:/schedule"
@@ -53,11 +49,7 @@ class ScheduleController(
     }
 
     @GetMapping("/room/{roomId}")
-    fun roomSchedule(
-        @PathVariable roomId: Long,
-        @RequestParam(required = false) semesterId: Long?,
-        model: Model
-    ): String {
+    fun roomSchedule(@PathVariable roomId: Long, @RequestParam(required = false) semesterId: Long?, model: Model): String {
         val rooms = roomService.getActiveRooms()
         val room = rooms.find { it.id == roomId } ?: return "redirect:/schedule"
 
@@ -77,7 +69,9 @@ class ScheduleController(
                 DayOfWeek.entries.associateWith { day ->
                     scheduleService.getRoomScheduleForDay(roomId, day)
                 }
-            } else emptyMap()
+            } else {
+                emptyMap()
+            }
 
         model.addAttribute("room", room)
         model.addAttribute("rooms", rooms)
@@ -90,11 +84,7 @@ class ScheduleController(
     }
 
     @GetMapping("/lecturer/{lecturerId}")
-    fun lecturerSchedule(
-        @PathVariable lecturerId: Long,
-        @RequestParam(required = false) semesterId: Long?,
-        model: Model
-    ): String {
+    fun lecturerSchedule(@PathVariable lecturerId: Long, @RequestParam(required = false) semesterId: Long?, model: Model): String {
         // Ähnlich wie roomSchedule, aber für Dozenten
         val activeSemesters = semesterService.getActiveSemesters()
         val currentSemester =

@@ -4,27 +4,17 @@ import de.tubaf.planner.model.Room
 import de.tubaf.planner.model.RoomType
 import de.tubaf.planner.repository.RoomRepository
 import de.tubaf.planner.repository.ScheduleEntryRepository
-import java.time.DayOfWeek
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.DayOfWeek
 
 @Service
 @Transactional
-class RoomService(
-    private val roomRepository: RoomRepository,
-    private val scheduleEntryRepository: ScheduleEntryRepository
-) {
+class RoomService(private val roomRepository: RoomRepository, private val scheduleEntryRepository: ScheduleEntryRepository) {
 
     /** Erstellt einen neuen Raum */
-    fun createRoom(
-        code: String,
-        building: String,
-        roomNumber: String,
-        capacity: Int?,
-        roomType: RoomType?,
-        equipment: String?
-    ): Room {
+    fun createRoom(code: String, building: String, roomNumber: String, capacity: Int?, roomType: RoomType?, equipment: String?): Room {
         // Prüfe auf doppelten Code
         roomRepository.findByCode(code)?.let {
             throw IllegalArgumentException("Room with code '$code' already exists")
@@ -37,7 +27,7 @@ class RoomService(
                 roomNumber = roomNumber,
                 capacity = capacity,
                 roomType = roomType,
-                equipment = equipment
+                equipment = equipment,
             )
 
         return roomRepository.save(room)
@@ -45,35 +35,23 @@ class RoomService(
 
     /** Gibt alle aktiven Räume zurück */
     @Transactional(readOnly = true)
-    fun getActiveRooms(): List<Room> {
-        return roomRepository.findByActive(true)
-    }
+    fun getActiveRooms(): List<Room> = roomRepository.findByActive(true)
 
     /** Gibt Räume nach Gebäude zurück */
     @Transactional(readOnly = true)
-    fun getRoomsByBuilding(building: String): List<Room> {
-        return roomRepository.findByBuildingAndActive(building, true)
-    }
+    fun getRoomsByBuilding(building: String): List<Room> = roomRepository.findByBuildingAndActive(building, true)
 
     /** Gibt Räume nach Typ zurück */
     @Transactional(readOnly = true)
-    fun getRoomsByType(roomType: RoomType): List<Room> {
-        return roomRepository.findByRoomTypeAndActive(roomType, true)
-    }
+    fun getRoomsByType(roomType: RoomType): List<Room> = roomRepository.findByRoomTypeAndActive(roomType, true)
 
     /** Sucht Räume nach Mindestkapazität */
     @Transactional(readOnly = true)
-    fun getRoomsByMinCapacity(minCapacity: Int): List<Room> {
-        return roomRepository.findByCapacityGreaterThanEqualAndActive(minCapacity, true)
-    }
+    fun getRoomsByMinCapacity(minCapacity: Int): List<Room> = roomRepository.findByCapacityGreaterThanEqualAndActive(minCapacity, true)
 
     /** Sucht verfügbare Räume mit erweiterten Filtern */
     @Transactional(readOnly = true)
-    fun findAvailableRooms(
-        minCapacity: Int?,
-        roomType: RoomType?,
-        building: String? = null
-    ): List<Room> {
+    fun findAvailableRooms(minCapacity: Int?, roomType: RoomType?, building: String? = null): List<Room> {
         var rooms =
             if (minCapacity != null) {
                 roomRepository.findAvailableRooms(minCapacity, roomType)
@@ -105,7 +83,7 @@ class RoomService(
         return RoomUtilization(
             roomCode = room.code,
             totalBookedSlots = totalSlots.toInt(),
-            utilizationByDay = utilizationByDay
+            utilizationByDay = utilizationByDay,
         )
     }
 
@@ -155,7 +133,9 @@ class RoomService(
         val avgCapacity =
             if (active.isNotEmpty()) {
                 active.mapNotNull { it.capacity }.average()
-            } else 0.0
+            } else {
+                0.0
+            }
 
         return RoomStatistics(
             totalRooms = all.size,
@@ -164,7 +144,7 @@ class RoomService(
             roomsByType = byType.mapValues { it.value.size },
             roomsByBuilding = byBuilding.mapValues { it.value.size },
             totalCapacity = totalCapacity,
-            averageCapacity = avgCapacity
+            averageCapacity = avgCapacity,
         )
     }
 }
@@ -177,15 +157,11 @@ data class RoomUpdateRequest(
     val capacity: Int? = null,
     val roomType: RoomType? = null,
     val equipment: String? = null,
-    val active: Boolean? = null
+    val active: Boolean? = null,
 )
 
 /** Auslastung eines Raumes */
-data class RoomUtilization(
-    val roomCode: String,
-    val totalBookedSlots: Int,
-    val utilizationByDay: Map<DayOfWeek, Int>
-)
+data class RoomUtilization(val roomCode: String, val totalBookedSlots: Int, val utilizationByDay: Map<DayOfWeek, Int>)
 
 /** Statistiken für alle Räume */
 data class RoomStatistics(
@@ -195,5 +171,5 @@ data class RoomStatistics(
     val roomsByType: Map<RoomType?, Int>,
     val roomsByBuilding: Map<String, Int>,
     val totalCapacity: Int,
-    val averageCapacity: Double
+    val averageCapacity: Double,
 )

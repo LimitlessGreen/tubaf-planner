@@ -5,13 +5,13 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import de.tubaf.planner.service.SemesterService
 import de.tubaf.planner.service.scraping.TubafScrapingService
-import java.time.Instant
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.fail
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.ActiveProfiles
+import java.time.Instant
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -25,7 +25,9 @@ class ScrapingJsonReportTest {
     private lateinit var baseUrl: String
 
     private val objectMapper =
-        jacksonObjectMapper().registerModule(JavaTimeModule()).disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+        jacksonObjectMapper()
+            .registerModule(JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 
     @Test
     fun generateScrapingReport() {
@@ -35,12 +37,13 @@ class ScrapingJsonReportTest {
 
         semesters.forEach { semester ->
             val start = Instant.now()
-            val semesterReport = mutableMapOf<String, Any?>(
-                "id" to semester.id,
-                "name" to semester.name,
-                "shortName" to semester.shortName,
-                "startedAt" to start,
-            )
+            val semesterReport =
+                mutableMapOf<String, Any?>(
+                    "id" to semester.id,
+                    "name" to semester.name,
+                    "shortName" to semester.shortName,
+                    "startedAt" to start,
+                )
 
             try {
                 val result = tubafScrapingService.scrapeSemesterData(semester)

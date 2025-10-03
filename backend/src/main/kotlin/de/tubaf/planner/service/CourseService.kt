@@ -13,7 +13,7 @@ class CourseService(
     private val semesterRepository: SemesterRepository,
     private val lecturerRepository: LecturerRepository,
     private val courseTypeRepository: CourseTypeRepository,
-    private val studyProgramRepository: StudyProgramRepository
+    private val studyProgramRepository: StudyProgramRepository,
 ) {
 
     /** Erstellt einen neuen Kurs */
@@ -25,7 +25,7 @@ class CourseService(
         lecturerId: Long,
         courseTypeCode: String,
         sws: Int?,
-        ectsCredits: Double?
+        ectsCredits: Double?,
     ): Course {
         val semester =
             semesterRepository.findByIdOrNull(semesterId)
@@ -53,18 +53,14 @@ class CourseService(
                 lecturer = lecturer,
                 courseType = courseType,
                 sws = sws,
-                ectsCredits = ectsCredits
+                ectsCredits = ectsCredits,
             )
 
         return courseRepository.save(course)
     }
 
     /** Fügt einen Kurs zu einem Studiengang hinzu */
-    fun addCourseToStudyProgram(
-        courseId: Long,
-        studyProgramId: Long,
-        semester: Int? = null
-    ): Course {
+    fun addCourseToStudyProgram(courseId: Long, studyProgramId: Long, semester: Int? = null): Course {
         val course =
             courseRepository.findByIdOrNull(courseId)
                 ?: throw IllegalArgumentException("Course with ID $courseId not found")
@@ -91,27 +87,21 @@ class CourseService(
 
     /** Gibt alle Kurse für ein Semester zurück */
     @Transactional(readOnly = true)
-    fun getCoursesBySemester(semesterId: Long): List<Course> {
-        return courseRepository.findBySemesterId(semesterId)
-    }
+    fun getCoursesBySemester(semesterId: Long): List<Course> = courseRepository.findBySemesterId(semesterId)
 
     /** Gibt alle Kurse für einen Studiengang in einem Semester zurück */
     @Transactional(readOnly = true)
-    fun getCoursesByStudyProgramAndSemester(studyProgramId: Long, semesterId: Long): List<Course> {
-        return courseRepository.findByStudyProgramAndSemester(studyProgramId, semesterId)
-    }
+    fun getCoursesByStudyProgramAndSemester(studyProgramId: Long, semesterId: Long): List<Course> =
+        courseRepository.findByStudyProgramAndSemester(studyProgramId, semesterId)
 
     /** Gibt alle Kurse für einen Dozenten in einem Semester zurück */
     @Transactional(readOnly = true)
-    fun getCoursesByLecturerAndSemester(lecturerId: Long, semesterId: Long): List<Course> {
-        return courseRepository.findByLecturerAndSemester(lecturerId, semesterId)
-    }
+    fun getCoursesByLecturerAndSemester(lecturerId: Long, semesterId: Long): List<Course> =
+        courseRepository.findByLecturerAndSemester(lecturerId, semesterId)
 
     /** Sucht Kurse nach Begriffen */
     @Transactional(readOnly = true)
-    fun searchCourses(searchTerm: String, semesterId: Long): List<Course> {
-        return courseRepository.searchInSemester(searchTerm, semesterId)
-    }
+    fun searchCourses(searchTerm: String, semesterId: Long): List<Course> = courseRepository.searchInSemester(searchTerm, semesterId)
 
     /** Aktualisiert einen Kurs */
     fun updateCourse(courseId: Long, updates: CourseUpdateRequest): Course {
@@ -159,7 +149,7 @@ class CourseService(
             totalCourses = courses.size,
             totalSws = totalSws,
             totalEcts = totalEcts,
-            coursesByType = coursesByType.mapValues { it.value.size }
+            coursesByType = coursesByType.mapValues { it.value.size },
         )
     }
 }
@@ -173,13 +163,8 @@ data class CourseUpdateRequest(
     val courseTypeCode: String? = null,
     val sws: Int? = null,
     val ectsCredits: Double? = null,
-    val active: Boolean? = null
+    val active: Boolean? = null,
 )
 
 /** Statistiken für einen Dozenten */
-data class LecturerStats(
-    val totalCourses: Int,
-    val totalSws: Int,
-    val totalEcts: Double,
-    val coursesByType: Map<String, Int>
-)
+data class LecturerStats(val totalCourses: Int, val totalSws: Int, val totalEcts: Double, val coursesByType: Map<String, Int>)

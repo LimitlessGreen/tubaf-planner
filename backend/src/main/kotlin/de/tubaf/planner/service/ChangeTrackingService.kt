@@ -2,17 +2,17 @@ package de.tubaf.planner.service
 
 import de.tubaf.planner.model.*
 import de.tubaf.planner.repository.*
-import java.time.LocalDateTime
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.LocalDateTime
 
 @Service
 @Transactional
 class ChangeTrackingService(
     private val scrapingRunRepository: ScrapingRunRepository,
     private val changeLogRepository: ChangeLogRepository,
-    private val semesterRepository: SemesterRepository
+    private val semesterRepository: SemesterRepository,
 ) {
 
     /** Startet einen neuen Scraping-Lauf */
@@ -27,12 +27,7 @@ class ChangeTrackingService(
     }
 
     /** Markiert einen Scraping-Lauf als erfolgreich abgeschlossen */
-    fun completeScrapingRun(
-        scrapingRunId: Long,
-        totalEntries: Int,
-        newEntries: Int,
-        updatedEntries: Int
-    ): ScrapingRun {
+    fun completeScrapingRun(scrapingRunId: Long, totalEntries: Int, newEntries: Int, updatedEntries: Int): ScrapingRun {
         val scrapingRun =
             scrapingRunRepository.findByIdOrNull(scrapingRunId)
                 ?: throw IllegalArgumentException("ScrapingRun with ID $scrapingRunId not found")
@@ -52,26 +47,14 @@ class ChangeTrackingService(
     }
 
     /** Protokolliert die Erstellung einer neuen Entity */
-    fun logEntityCreated(
-        scrapingRunId: Long,
-        entityType: String,
-        entityId: Long,
-        description: String? = null
-    ) {
+    fun logEntityCreated(scrapingRunId: Long, entityType: String, entityId: Long, description: String? = null) {
         val scrapingRun = getScrapingRun(scrapingRunId)
         val changeLog = ChangeLog.created(scrapingRun, entityType, entityId, description)
         changeLogRepository.save(changeLog)
     }
 
     /** Protokolliert die Aktualisierung einer Entity */
-    fun logEntityUpdated(
-        scrapingRunId: Long,
-        entityType: String,
-        entityId: Long,
-        fieldName: String,
-        oldValue: String?,
-        newValue: String?
-    ) {
+    fun logEntityUpdated(scrapingRunId: Long, entityType: String, entityId: Long, fieldName: String, oldValue: String?, newValue: String?) {
         val scrapingRun = getScrapingRun(scrapingRunId)
         val changeLog =
             ChangeLog.updated(scrapingRun, entityType, entityId, fieldName, oldValue, newValue)
@@ -79,12 +62,7 @@ class ChangeTrackingService(
     }
 
     /** Protokolliert die Löschung einer Entity */
-    fun logEntityDeleted(
-        scrapingRunId: Long,
-        entityType: String,
-        entityId: Long,
-        description: String? = null
-    ) {
+    fun logEntityDeleted(scrapingRunId: Long, entityType: String, entityId: Long, description: String? = null) {
         val scrapingRun = getScrapingRun(scrapingRunId)
         val changeLog = ChangeLog.deleted(scrapingRun, entityType, entityId, description)
         changeLogRepository.save(changeLog)
@@ -92,21 +70,17 @@ class ChangeTrackingService(
 
     /** Gibt alle Änderungen für einen Scraping-Lauf zurück */
     @Transactional(readOnly = true)
-    fun getChangesForScrapingRun(scrapingRunId: Long): List<ChangeLog> {
-        return changeLogRepository.findByScrapingRunId(scrapingRunId)
-    }
+    fun getChangesForScrapingRun(scrapingRunId: Long): List<ChangeLog> = changeLogRepository.findByScrapingRunId(scrapingRunId)
 
     /** Gibt die Änderungshistorie für eine spezifische Entity zurück */
     @Transactional(readOnly = true)
-    fun getEntityHistory(entityType: String, entityId: Long): List<ChangeLog> {
-        return changeLogRepository.findByEntityTypeAndEntityId(entityType, entityId)
-    }
+    fun getEntityHistory(entityType: String, entityId: Long): List<ChangeLog> =
+        changeLogRepository.findByEntityTypeAndEntityId(entityType, entityId)
 
     /** Gibt aktuelle Änderungen seit einem bestimmten Zeitpunkt zurück */
     @Transactional(readOnly = true)
-    fun getRecentChanges(since: LocalDateTime, entityType: String? = null): List<ChangeLog> {
-        return changeLogRepository.findRecentChanges(since, entityType)
-    }
+    fun getRecentChanges(since: LocalDateTime, entityType: String? = null): List<ChangeLog> =
+        changeLogRepository.findRecentChanges(since, entityType)
 
     /** Gibt Änderungsstatistiken für einen Scraping-Lauf zurück */
     @Transactional(readOnly = true)
@@ -120,26 +94,21 @@ class ChangeTrackingService(
             created = created.toInt(),
             updated = updated.toInt(),
             deleted = deleted.toInt(),
-            total = (created + updated + deleted).toInt()
+            total = (created + updated + deleted).toInt(),
         )
     }
 
     /** Gibt alle Scraping-Läufe für ein Semester zurück */
     @Transactional(readOnly = true)
-    fun getScrapingRunsForSemester(semesterId: Long): List<ScrapingRun> {
-        return scrapingRunRepository.findBySemesterIdOrderByStartTimeDesc(semesterId)
-    }
+    fun getScrapingRunsForSemester(semesterId: Long): List<ScrapingRun> =
+        scrapingRunRepository.findBySemesterIdOrderByStartTimeDesc(semesterId)
 
     /** Gibt den letzten erfolgreichen Scraping-Lauf für ein Semester zurück */
     @Transactional(readOnly = true)
-    fun getLastSuccessfulRun(semesterId: Long): ScrapingRun? {
-        return scrapingRunRepository.findLastSuccessfulRun(semesterId)
-    }
+    fun getLastSuccessfulRun(semesterId: Long): ScrapingRun? = scrapingRunRepository.findLastSuccessfulRun(semesterId)
 
-    private fun getScrapingRun(scrapingRunId: Long): ScrapingRun {
-        return scrapingRunRepository.findByIdOrNull(scrapingRunId)
-            ?: throw IllegalArgumentException("ScrapingRun with ID $scrapingRunId not found")
-    }
+    private fun getScrapingRun(scrapingRunId: Long): ScrapingRun = scrapingRunRepository.findByIdOrNull(scrapingRunId)
+        ?: throw IllegalArgumentException("ScrapingRun with ID $scrapingRunId not found")
 }
 
 /** Änderungsstatistiken für einen Scraping-Lauf */

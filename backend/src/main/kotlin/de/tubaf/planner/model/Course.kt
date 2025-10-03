@@ -26,7 +26,7 @@ class Course(
     var courseType: CourseType,
     @Column(name = "sws") var sws: Int? = null,
     @Column(name = "ects_credits") var ectsCredits: Double? = null,
-    @Column(name = "active") var active: Boolean = true
+    @Column(name = "active") var active: Boolean = true,
 ) : BaseEntity() {
 
     @OneToMany(mappedBy = "course", cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
@@ -36,7 +36,7 @@ class Course(
         mappedBy = "course",
         cascade = [CascadeType.ALL],
         fetch = FetchType.LAZY,
-        orphanRemoval = true
+        orphanRemoval = true,
     )
     var courseStudyPrograms: MutableSet<CourseStudyProgram> = mutableSetOf()
 
@@ -51,7 +51,5 @@ class Course(
         studyProgram.courseStudyPrograms.removeIf { it.course == this }
     }
 
-    override fun toString(): String {
-        return "Course(id=$id, name='$name', courseNumber='$courseNumber', lecturer=${lecturer.name})"
-    }
+    override fun toString(): String = "Course(id=$id, name='$name', courseNumber='$courseNumber', lecturer=${lecturer.name})"
 }

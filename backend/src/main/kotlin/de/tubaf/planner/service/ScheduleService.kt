@@ -2,11 +2,11 @@ package de.tubaf.planner.service
 
 import de.tubaf.planner.model.*
 import de.tubaf.planner.repository.*
-import java.time.DayOfWeek
-import java.time.LocalTime
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.DayOfWeek
+import java.time.LocalTime
 
 @Service
 @Transactional
@@ -15,7 +15,7 @@ class ScheduleService(
     private val courseRepository: CourseRepository,
     private val roomRepository: RoomRepository,
     private val semesterRepository: SemesterRepository,
-    private val studyProgramRepository: StudyProgramRepository
+    private val studyProgramRepository: StudyProgramRepository,
 ) {
 
     /** Erstellt einen neuen Stundenplan-Eintrag nach Konfliktprüfung */
@@ -26,7 +26,7 @@ class ScheduleService(
         startTime: LocalTime,
         endTime: LocalTime,
         weekPattern: String? = null,
-        notes: String? = null
+        notes: String? = null,
     ): ScheduleEntry {
         val course =
             courseRepository.findByIdOrNull(courseId)
@@ -52,7 +52,7 @@ class ScheduleService(
                 startTime = startTime,
                 endTime = endTime,
                 weekPattern = weekPattern,
-                notes = notes
+                notes = notes,
             )
 
         return scheduleEntryRepository.save(scheduleEntry)
@@ -60,27 +60,22 @@ class ScheduleService(
 
     /** Gibt den Stundenplan für ein Studienprogramm in einem Semester zurück */
     @Transactional(readOnly = true)
-    fun getScheduleForStudyProgram(studyProgramId: Long, semesterId: Long): List<ScheduleEntry> {
-        return scheduleEntryRepository.findByStudyProgramAndSemester(studyProgramId, semesterId)
-    }
+    fun getScheduleForStudyProgram(studyProgramId: Long, semesterId: Long): List<ScheduleEntry> =
+        scheduleEntryRepository.findByStudyProgramAndSemester(studyProgramId, semesterId)
 
     /** Gibt den gesamten Stundenplan für ein Semester zurück */
     @Transactional(readOnly = true)
-    fun getScheduleForSemester(semesterId: Long): List<ScheduleEntry> {
-        return scheduleEntryRepository.findBySemesterId(semesterId)
-    }
+    fun getScheduleForSemester(semesterId: Long): List<ScheduleEntry> = scheduleEntryRepository.findBySemesterId(semesterId)
 
     /** Gibt den Stundenplan für einen Dozenten in einem Semester zurück */
     @Transactional(readOnly = true)
-    fun getScheduleForLecturer(lecturerId: Long, semesterId: Long): List<ScheduleEntry> {
-        return scheduleEntryRepository.findByLecturerAndSemester(lecturerId, semesterId)
-    }
+    fun getScheduleForLecturer(lecturerId: Long, semesterId: Long): List<ScheduleEntry> =
+        scheduleEntryRepository.findByLecturerAndSemester(lecturerId, semesterId)
 
     /** Gibt die Raumbelegung für einen spezifischen Wochentag zurück */
     @Transactional(readOnly = true)
-    fun getRoomScheduleForDay(roomId: Long, dayOfWeek: DayOfWeek): List<ScheduleEntry> {
-        return scheduleEntryRepository.findByRoomAndDayOfWeek(roomId, dayOfWeek)
-    }
+    fun getRoomScheduleForDay(roomId: Long, dayOfWeek: DayOfWeek): List<ScheduleEntry> =
+        scheduleEntryRepository.findByRoomAndDayOfWeek(roomId, dayOfWeek)
 
     /** Findet verfügbare Räume zu einer bestimmten Zeit */
     @Transactional(readOnly = true)
@@ -89,7 +84,7 @@ class ScheduleService(
         startTime: LocalTime,
         endTime: LocalTime,
         minCapacity: Int? = null,
-        roomType: RoomType? = null
+        roomType: RoomType? = null,
     ): List<Room> {
         val availableRooms = roomRepository.findAvailableRoomsAtTime(dayOfWeek, startTime, endTime)
 
@@ -120,9 +115,7 @@ class ScheduleService(
 
     /** Gibt alle Stundenplan-Einträge für ein Semester zurück */
     @Transactional(readOnly = true)
-    fun getScheduleBySemester(semesterId: Long): List<ScheduleEntry> {
-        return scheduleEntryRepository.findBySemesterId(semesterId)
-    }
+    fun getScheduleBySemester(semesterId: Long): List<ScheduleEntry> = scheduleEntryRepository.findBySemesterId(semesterId)
 
     /** Aktualisiert einen Stundenplan-Eintrag */
     fun updateScheduleEntry(entryId: Long, updates: ScheduleEntryUpdateRequest): ScheduleEntry {
@@ -138,11 +131,10 @@ class ScheduleService(
 
         if (
             newRoomId != entry.room.id ||
-                newDayOfWeek != entry.dayOfWeek ||
-                newStartTime != entry.startTime ||
-                newEndTime != entry.endTime
+            newDayOfWeek != entry.dayOfWeek ||
+            newStartTime != entry.startTime ||
+            newEndTime != entry.endTime
         ) {
-
             val conflicts =
                 scheduleEntryRepository
                     .findConflictingEntries(newRoomId, newDayOfWeek, newStartTime, newEndTime)
@@ -178,5 +170,5 @@ data class ScheduleEntryUpdateRequest(
     val endTime: LocalTime? = null,
     val weekPattern: String? = null,
     val notes: String? = null,
-    val active: Boolean? = null
+    val active: Boolean? = null,
 )
