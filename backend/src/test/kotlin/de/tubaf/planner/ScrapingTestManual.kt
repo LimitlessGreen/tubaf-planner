@@ -3,12 +3,12 @@ package de.tubaf.planner
 import de.tubaf.planner.model.*
 import de.tubaf.planner.repository.*
 import de.tubaf.planner.service.ChangeTrackingService
-import java.time.DayOfWeek
-import java.time.LocalTime
 import org.slf4j.LoggerFactory
 import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Profile
 import org.springframework.stereotype.Component
+import java.time.DayOfWeek
+import java.time.LocalTime
 
 /**
  * Einfacher manueller Test für das Scraping-System ohne Playwright Erstellt Test-Daten um zu
@@ -23,7 +23,7 @@ class ScrapingTestManual(
     private val roomRepository: RoomRepository,
     private val courseTypeRepository: CourseTypeRepository,
     private val scheduleEntryRepository: ScheduleEntryRepository,
-    private val changeTrackingService: ChangeTrackingService
+    private val changeTrackingService: ChangeTrackingService,
 ) : CommandLineRunner {
 
     private val logger = LoggerFactory.getLogger(ScrapingTestManual::class.java)
@@ -52,7 +52,7 @@ class ScrapingTestManual(
                 scrapingRun.id!!,
                 newEntries = 3,
                 updatedEntries = 0,
-                totalEntries = 3
+                totalEntries = 3,
             )
 
             logger.info("🎉 Manual scraping test completed successfully!")
@@ -69,7 +69,7 @@ class ScrapingTestManual(
         // Erstelle Test-Kurstypen
         val vorlesung =
             courseTypeRepository.save(
-                CourseType(code = "V", name = "Vorlesung", description = "Vorlesung")
+                CourseType(code = "V", name = "Vorlesung", description = "Vorlesung"),
             )
 
         val uebung =
@@ -82,8 +82,8 @@ class ScrapingTestManual(
                     name = "Prof. Dr. Max Mustermann",
                     title = "Prof. Dr.",
                     department = "Fakultät für Mathematik und Informatik",
-                    email = "max.mustermann@tu-freiberg.de"
-                )
+                    email = "max.mustermann@tu-freiberg.de",
+                ),
             )
 
         val prof2 =
@@ -92,8 +92,8 @@ class ScrapingTestManual(
                     name = "Dr. Anna Schmidt",
                     title = "Dr.",
                     department = "Fakultät für Chemie und Physik",
-                    email = "anna.schmidt@tu-freiberg.de"
-                )
+                    email = "anna.schmidt@tu-freiberg.de",
+                ),
             )
 
         // Erstelle Test-Räume
@@ -104,8 +104,8 @@ class ScrapingTestManual(
                     building = "MIB",
                     roomNumber = "1001",
                     roomType = RoomType.LECTURE_HALL,
-                    capacity = 150
-                )
+                    capacity = 150,
+                ),
             )
 
         val room2 =
@@ -115,8 +115,8 @@ class ScrapingTestManual(
                     building = "CHE",
                     roomNumber = "2001",
                     roomType = RoomType.SEMINAR_ROOM,
-                    capacity = 30
-                )
+                    capacity = 30,
+                ),
             )
 
         // Erstelle Test-Kurse
@@ -129,8 +129,8 @@ class ScrapingTestManual(
                     lecturer = prof1,
                     courseType = vorlesung,
                     sws = 4,
-                    ectsCredits = 6.0
-                )
+                    ectsCredits = 6.0,
+                ),
             )
 
         val kurs2 =
@@ -142,8 +142,8 @@ class ScrapingTestManual(
                     lecturer = prof1,
                     courseType = uebung,
                     sws = 2,
-                    ectsCredits = 0.0
-                )
+                    ectsCredits = 0.0,
+                ),
             )
 
         val kurs3 =
@@ -155,8 +155,8 @@ class ScrapingTestManual(
                     lecturer = prof2,
                     courseType = vorlesung,
                     sws = 3,
-                    ectsCredits = 4.0
-                )
+                    ectsCredits = 4.0,
+                ),
             )
 
         // Erstelle Termineinträge
@@ -167,8 +167,8 @@ class ScrapingTestManual(
                 dayOfWeek = DayOfWeek.TUESDAY,
                 startTime = LocalTime.of(8, 0),
                 endTime = LocalTime.of(10, 0),
-                weekPattern = "wöchentlich"
-            )
+                weekPattern = "wöchentlich",
+            ),
         )
 
         scheduleEntryRepository.save(
@@ -178,8 +178,8 @@ class ScrapingTestManual(
                 dayOfWeek = DayOfWeek.FRIDAY,
                 startTime = LocalTime.of(10, 0),
                 endTime = LocalTime.of(12, 0),
-                weekPattern = "wöchentlich"
-            )
+                weekPattern = "wöchentlich",
+            ),
         )
 
         scheduleEntryRepository.save(
@@ -189,8 +189,8 @@ class ScrapingTestManual(
                 dayOfWeek = DayOfWeek.MONDAY,
                 startTime = LocalTime.of(14, 0),
                 endTime = LocalTime.of(16, 0),
-                weekPattern = "14-täglich"
-            )
+                weekPattern = "14-täglich",
+            ),
         )
 
         // Tracke die Änderungen

@@ -30,7 +30,7 @@ interface CourseRepository : JpaRepository<Course, Long> {
         WHERE c.semester.id = :semesterId 
         AND c.active = true
         ORDER BY c.name
-        """
+        """,
     )
     fun findBySemesterId(@Param("semesterId") semesterId: Long): List<Course>
 
@@ -42,12 +42,9 @@ interface CourseRepository : JpaRepository<Course, Long> {
         AND c.semester.id = :semesterId 
         AND c.active = true
         ORDER BY c.name
-        """
+        """,
     )
-    fun findByStudyProgramAndSemester(
-        @Param("studyProgramId") studyProgramId: Long,
-        @Param("semesterId") semesterId: Long
-    ): List<Course>
+    fun findByStudyProgramAndSemester(@Param("studyProgramId") studyProgramId: Long, @Param("semesterId") semesterId: Long): List<Course>
 
     @Query(
         """
@@ -56,12 +53,9 @@ interface CourseRepository : JpaRepository<Course, Long> {
         AND c.semester.id = :semesterId 
         AND c.active = true
         ORDER BY c.courseType.code, c.name
-        """
+        """,
     )
-    fun findByLecturerAndSemester(
-        @Param("lecturerId") lecturerId: Long,
-        @Param("semesterId") semesterId: Long
-    ): List<Course>
+    fun findByLecturerAndSemester(@Param("lecturerId") lecturerId: Long, @Param("semesterId") semesterId: Long): List<Course>
 
     @Query(
         """
@@ -72,12 +66,9 @@ interface CourseRepository : JpaRepository<Course, Long> {
              OR LOWER(c.description) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
              OR LOWER(c.courseNumber) LIKE LOWER(CONCAT('%', :searchTerm, '%')))
         ORDER BY c.name
-        """
+        """,
     )
-    fun searchInSemester(
-        @Param("searchTerm") searchTerm: String,
-        @Param("semesterId") semesterId: Long
-    ): List<Course>
+    fun searchInSemester(@Param("searchTerm") searchTerm: String, @Param("semesterId") semesterId: Long): List<Course>
 
     @Query(
         """
@@ -85,7 +76,7 @@ interface CourseRepository : JpaRepository<Course, Long> {
         LEFT JOIN FETCH c.scheduleEntries se
         LEFT JOIN FETCH se.room
         WHERE c.id = :courseId
-        """
+        """,
     )
     fun findByIdWithScheduleEntries(@Param("courseId") courseId: Long): Course?
 }

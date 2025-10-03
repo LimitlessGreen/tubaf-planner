@@ -15,9 +15,11 @@ class CourseType(
     @field:NotBlank
     @field:Size(max = 50)
     var name: String,
-    @Column(name = "description", columnDefinition = "TEXT") var description: String? = null
+    @Column(name = "description", columnDefinition = "TEXT") var description: String? = null,
 ) {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) var id: Long? = null
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    var id: Long? = null
 
     @OneToMany(mappedBy = "courseType", fetch = FetchType.LAZY)
     var courses: MutableSet<Course> = mutableSetOf()
@@ -30,7 +32,5 @@ class CourseType(
 
     override fun hashCode(): Int = id?.hashCode() ?: 0
 
-    override fun toString(): String {
-        return "CourseType(id=$id, code='$code', name='$name')"
-    }
+    override fun toString(): String = "CourseType(id=$id, code='$code', name='$name')"
 }

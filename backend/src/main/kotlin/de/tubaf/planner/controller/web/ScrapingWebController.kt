@@ -9,7 +9,5 @@ import org.springframework.web.bind.annotation.RequestMapping
 class ScrapingWebController {
 
     @GetMapping
-    fun scrapingOverview(): String {
-        return "redirect:/data/scraping"
-    }
+    fun scrapingOverview(): String = "redirect:/data/scraping"
 }

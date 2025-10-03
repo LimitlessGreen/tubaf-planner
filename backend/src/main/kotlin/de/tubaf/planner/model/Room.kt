@@ -28,15 +28,13 @@ class Room(
     @Column(name = "location_description", length = 255)
     var locationDescription: String? = null,
     @Column(name = "plan_updated_at") var planUpdatedAt: LocalDate? = null,
-    @Column(name = "active") var active: Boolean = true
+    @Column(name = "active") var active: Boolean = true,
 ) : BaseEntity() {
 
     @OneToMany(mappedBy = "room", fetch = FetchType.LAZY)
     var scheduleEntries: MutableSet<ScheduleEntry> = mutableSetOf()
 
-    override fun toString(): String {
-        return "Room(id=$id, code='$code', building='$building', roomNumber='$roomNumber')"
-    }
+    override fun toString(): String = "Room(id=$id, code='$code', building='$building', roomNumber='$roomNumber')"
 }
 
 enum class RoomType {
@@ -46,5 +44,5 @@ enum class RoomType {
     COMPUTER_ROOM,
     WORKSHOP,
     OFFICE,
-    OTHER
+    OTHER,
 }

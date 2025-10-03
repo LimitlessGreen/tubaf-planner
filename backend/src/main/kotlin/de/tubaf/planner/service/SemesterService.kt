@@ -2,23 +2,17 @@ package de.tubaf.planner.service
 
 import de.tubaf.planner.model.Semester
 import de.tubaf.planner.repository.SemesterRepository
-import java.time.LocalDate
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.LocalDate
 
 @Service
 @Transactional
 class SemesterService(private val semesterRepository: SemesterRepository) {
 
     /** Erstellt ein neues Semester */
-    fun createSemester(
-        name: String,
-        shortName: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-        active: Boolean = false
-    ): Semester {
+    fun createSemester(name: String, shortName: String, startDate: LocalDate, endDate: LocalDate, active: Boolean = false): Semester {
         // Prüfe auf doppelte Namen
         semesterRepository.findByName(name)?.let {
             throw IllegalArgumentException("Semester with name '$name' already exists")
@@ -38,7 +32,7 @@ class SemesterService(private val semesterRepository: SemesterRepository) {
                 shortName = shortName,
                 startDate = startDate,
                 endDate = endDate,
-                active = active
+                active = active,
             )
 
         return semesterRepository.save(semester)
@@ -64,27 +58,19 @@ class SemesterService(private val semesterRepository: SemesterRepository) {
 
     /** Gibt das aktuell aktive Semester zurück */
     @Transactional(readOnly = true)
-    fun getActiveSemester(): Semester? {
-        return semesterRepository.findActiveSemesters().firstOrNull()
-    }
+    fun getActiveSemester(): Semester? = semesterRepository.findActiveSemesters().firstOrNull()
 
     /** Gibt das Semester zurück, das zu einem bestimmten Datum aktiv ist */
     @Transactional(readOnly = true)
-    fun getCurrentSemester(date: LocalDate = LocalDate.now()): Semester? {
-        return semesterRepository.findCurrentSemester(date)
-    }
+    fun getCurrentSemester(date: LocalDate = LocalDate.now()): Semester? = semesterRepository.findCurrentSemester(date)
 
     /** Gibt alle Semester zurück, sortiert nach Startdatum */
     @Transactional(readOnly = true)
-    fun getAllSemesters(): List<Semester> {
-        return semesterRepository.findAll().sortedByDescending { it.startDate }
-    }
+    fun getAllSemesters(): List<Semester> = semesterRepository.findAll().sortedByDescending { it.startDate }
 
     /** Gibt alle aktiven Semester zurück */
     @Transactional(readOnly = true)
-    fun getActiveSemesters(): List<Semester> {
-        return semesterRepository.findActiveSemesters()
-    }
+    fun getActiveSemesters(): List<Semester> = semesterRepository.findActiveSemesters()
 
     /** Aktualisiert ein Semester */
     fun updateSemester(semesterId: Long, updates: SemesterUpdateRequest): Semester {
@@ -105,7 +91,7 @@ class SemesterService(private val semesterRepository: SemesterRepository) {
             semesterRepository.findByShortName(shortName)?.let {
                 if (it.id != semesterId) {
                     throw IllegalArgumentException(
-                        "Semester with short name '$shortName' already exists"
+                        "Semester with short name '$shortName' already exists",
                     )
                 }
             }
@@ -135,5 +121,5 @@ data class SemesterUpdateRequest(
     val name: String? = null,
     val shortName: String? = null,
     val startDate: LocalDate? = null,
-    val endDate: LocalDate? = null
+    val endDate: LocalDate? = null,
 )

@@ -19,7 +19,7 @@ class ScrapingRun(
     @Column(name = "new_entries") var newEntries: Int? = null,
     @Column(name = "updated_entries") var updatedEntries: Int? = null,
     @Column(name = "error_message", columnDefinition = "TEXT") var errorMessage: String? = null,
-    @Column(name = "source_url", length = 500) var sourceUrl: String? = null
+    @Column(name = "source_url", length = 500) var sourceUrl: String? = null,
 ) : BaseEntity() {
 
     @OneToMany(mappedBy = "scrapingRun", cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
@@ -29,7 +29,9 @@ class ScrapingRun(
         get() =
             if (endTime != null) {
                 java.time.Duration.between(startTime, endTime).toMinutes()
-            } else null
+            } else {
+                null
+            }
 
     fun markCompleted(totalEntries: Int, newEntries: Int, updatedEntries: Int) {
         this.endTime = LocalDateTime.now()
@@ -45,14 +47,12 @@ class ScrapingRun(
         this.errorMessage = errorMessage
     }
 
-    override fun toString(): String {
-        return "ScrapingRun(id=$id, semester=${semester.shortName}, status=$status, startTime=$startTime)"
-    }
+    override fun toString(): String = "ScrapingRun(id=$id, semester=${semester.shortName}, status=$status, startTime=$startTime)"
 }
 
 enum class ScrapingStatus {
     RUNNING,
     COMPLETED,
     FAILED,
-    CANCELLED
+    CANCELLED,
 }

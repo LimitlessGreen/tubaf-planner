@@ -2,12 +2,12 @@ package de.tubaf.planner
 
 import de.tubaf.planner.service.SemesterService
 import de.tubaf.planner.service.scraping.TubafScrapingService
-import java.time.LocalDate
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.ActiveProfiles
+import java.time.LocalDate
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -29,7 +29,7 @@ class RealTubafScrapingTest {
                 shortName = "WS2526",
                 startDate = LocalDate.of(2025, 10, 1),
                 endDate = LocalDate.of(2026, 3, 31),
-                active = true
+                active = true,
             )
         println("📅 Created test semester: ${savedSemester.shortName}")
 
@@ -76,7 +76,7 @@ class RealTubafScrapingTest {
                     shortName = "WS2526",
                     startDate = LocalDate.of(2025, 10, 1),
                     endDate = LocalDate.of(2026, 3, 31),
-                    active = false
+                    active = false,
                 )
 
             val result = tubafScrapingService.discoverAndScrapeAvailableSemesters()

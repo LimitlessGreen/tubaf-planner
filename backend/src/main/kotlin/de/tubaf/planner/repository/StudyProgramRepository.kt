@@ -26,11 +26,9 @@ interface StudyProgramRepository : JpaRepository<StudyProgram, Long> {
         WHERE sp.active = true 
         AND sp.degreeType IN :degreeTypes
         ORDER BY sp.degreeType, sp.name
-        """
+        """,
     )
-    fun findActiveByDegreeTypes(
-        @Param("degreeTypes") degreeTypes: List<DegreeType>
-    ): List<StudyProgram>
+    fun findActiveByDegreeTypes(@Param("degreeTypes") degreeTypes: List<DegreeType>): List<StudyProgram>
 
     @Query(
         """
@@ -39,7 +37,7 @@ interface StudyProgramRepository : JpaRepository<StudyProgram, Long> {
         JOIN csp.course c 
         WHERE c.semester.id = :semesterId 
         AND sp.active = true
-        """
+        """,
     )
     fun findBySemesterIdAndActive(@Param("semesterId") semesterId: Long): List<StudyProgram>
 }

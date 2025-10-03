@@ -13,7 +13,7 @@ class DashboardController(
     private val courseService: CourseService,
     private val studyProgramService: StudyProgramService,
     private val roomService: RoomService,
-    private val changeTrackingService: ChangeTrackingService
+    private val changeTrackingService: ChangeTrackingService,
 ) {
 
     @GetMapping

@@ -19,20 +19,18 @@ class StudyProgram(
     @Enumerated(EnumType.STRING)
     @Column(name = "degree_type", nullable = false, length = 20)
     var degreeType: DegreeType,
-    @Column(name = "active") var active: Boolean = true
+    @Column(name = "active") var active: Boolean = true,
 ) : BaseEntity() {
 
     @OneToMany(mappedBy = "studyProgram", cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
     var courseStudyPrograms: MutableSet<CourseStudyProgram> = mutableSetOf()
 
-    override fun toString(): String {
-        return "StudyProgram(id=$id, code='$code', name='$name', degreeType=$degreeType)"
-    }
+    override fun toString(): String = "StudyProgram(id=$id, code='$code', name='$name', degreeType=$degreeType)"
 }
 
 enum class DegreeType {
     BACHELOR,
     MASTER,
     DIPLOMA,
-    DOCTORATE
+    DOCTORATE,
 }

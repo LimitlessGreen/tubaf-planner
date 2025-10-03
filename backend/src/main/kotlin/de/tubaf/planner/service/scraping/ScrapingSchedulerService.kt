@@ -10,12 +10,9 @@ import org.springframework.stereotype.Service
 @ConditionalOnProperty(
     name = ["tubaf.scraper.scheduling.enabled"],
     havingValue = "true",
-    matchIfMissing = false
+    matchIfMissing = false,
 )
-class ScrapingSchedulerService(
-    private val tubafScrapingService: TubafScrapingService,
-    private val semesterService: SemesterService
-) {
+class ScrapingSchedulerService(private val tubafScrapingService: TubafScrapingService, private val semesterService: SemesterService) {
 
     private val logger = LoggerFactory.getLogger(ScrapingSchedulerService::class.java)
 

@@ -19,14 +19,17 @@ class Semester(
     var shortName: String,
     @Column(name = "start_date", nullable = false) var startDate: LocalDate,
     @Column(name = "end_date", nullable = false) var endDate: LocalDate,
-    @Column(name = "active") var active: Boolean = false
+    @Column(name = "active") var active: Boolean = false,
 ) {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) var id: Long? = null
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    var id: Long? = null
 
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: LocalDateTime = LocalDateTime.now()
 
-    @Column(name = "updated_at") var updatedAt: LocalDateTime? = null
+    @Column(name = "updated_at")
+    var updatedAt: LocalDateTime? = null
 
     @OneToMany(mappedBy = "semester", cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
     var courses: MutableSet<Course> = mutableSetOf()
@@ -42,7 +45,5 @@ class Semester(
 
     override fun hashCode(): Int = id?.hashCode() ?: 0
 
-    override fun toString(): String {
-        return "Semester(id=$id, name='$name', shortName='$shortName', active=$active)"
-    }
+    override fun toString(): String = "Semester(id=$id, name='$name', shortName='$shortName', active=$active)"
 }

@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*
 class ApiController(
     private val scheduleService: ScheduleService,
     private val semesterService: SemesterService,
-    private val courseService: CourseService
+    private val courseService: CourseService,
 ) {
 
     @GetMapping("/schedule/entry/{id}")
@@ -23,7 +23,7 @@ class ApiController(
     fun exportSchedule(
         @RequestParam(required = false) semesterId: Long?,
         @RequestParam(required = false) studyProgramId: Long?,
-        @RequestParam(defaultValue = "pdf") format: String
+        @RequestParam(defaultValue = "pdf") format: String,
     ): ResponseEntity<ByteArray> {
         // TODO: Implement schedule export
         return ResponseEntity.ok()
@@ -43,8 +43,8 @@ class ApiController(
                 "activeSemesters" to activeSemesters.size,
                 "totalCourses" to 0,
                 "recentChanges" to 0,
-                "lastScrapingRun" to ""
-            )
+                "lastScrapingRun" to "",
+            ),
         )
     }
 }
