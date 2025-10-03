@@ -131,6 +131,3 @@ spotless {
 }
 
 tasks.named("compileKotlin") { dependsOn("spotlessApply") }
-ktfmt {
-	kotlinLangStyle()
-}
