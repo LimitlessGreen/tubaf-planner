@@ -257,20 +257,34 @@ open class TubafScrapingService(
         try {
             for ((index, option) in semesterOptions.withIndex()) {
                 ensureNotCancelled()
-                logger.info("[{} / {}] Entdeckt: {}", index + 1, semesterOptions.size, option.displayName)
+                logger.info(
+                    "[{} / {}] Entdeckt: {}",
+                    index + 1,
+                    semesterOptions.size,
+                    option.displayName,
+                )
                 progressTracker.log("INFO", "Scraping ${option.displayName}")
                 val subId = "sem-$index"
                 progressTracker.startSubTask(subId, total = 100)
 
                 session.selectSemester(option)
                 val semester = getOrCreateSemester(option)
-                val semesterResult = scrapeSemesterDataWithSession(session, semester, trackProgress = false)
+                val semesterResult =
+                    scrapeSemesterDataWithSession(
+                        session,
+                        semester,
+                        trackProgress = false,
+                    )
                 results += semesterResult
 
                 progressTracker.updateSubTask(
                     id = subId,
                     processed = 100,
-                    message = "${semesterResult.totalEntries} Einträge (neu ${semesterResult.newEntries}, aktualisiert ${semesterResult.updatedEntries})"
+                    message = (
+                        "${semesterResult.totalEntries} Einträge (" +
+                            "neu ${semesterResult.newEntries}, " +
+                            "aktualisiert ${semesterResult.updatedEntries})"
+                        )
                 )
                 progressTracker.completeSubTask(subId)
             }
@@ -537,7 +551,12 @@ open class TubafScrapingService(
         disabled: Int = 0
     ): String {
         val semShort = semester.shortName
-        return "${semShort}:${program.code}: ${stats.totalEntries} Einträge (neu ${stats.newEntries}, aktualisiert ${stats.updatedEntries}, deaktiviert ${disabled})"
+        return (
+            "${semShort}:${program.code}: ${stats.totalEntries} Einträge (" +
+                "neu ${stats.newEntries}, " +
+                "aktualisiert ${stats.updatedEntries}, " +
+                "deaktiviert ${disabled})"
+            )
     }
 
     private fun persistRows(
@@ -551,7 +570,11 @@ open class TubafScrapingService(
             val timeRange = parseTimeRange(row.time)
 
             if (dayOfWeek == null || timeRange == null) {
-                logger.debug("      Überspringe Zeile wegen ungültiger Zeit/Tag: {} - {}", row.day, row.time)
+                logger.debug(
+                    "      Überspringe Zeile wegen ungültiger Zeit/Tag: {} - {}",
+                    row.day,
+                    row.time,
+                )
                 continue
             }
 
@@ -567,12 +590,13 @@ open class TubafScrapingService(
                 // Lade Course mit scheduleEntries, um LazyInitializationException zu vermeiden
                 val courseWithEntries = courseRepository.findByIdWithScheduleEntries(course.id!!) ?: course
             
-                val existingEntry = courseWithEntries.scheduleEntries.firstOrNull {
-                    it.dayOfWeek == dayOfWeek &&
-                        it.startTime == timeRange.first &&
-                        it.endTime == timeRange.second &&
-                        it.room.code.equals(room.code, ignoreCase = true)
-                }
+                val existingEntry =
+                    courseWithEntries.scheduleEntries.firstOrNull { se ->
+                        se.dayOfWeek == dayOfWeek &&
+                            se.startTime == timeRange.first &&
+                            se.endTime == timeRange.second &&
+                            se.room.code.equals(room.code, ignoreCase = true)
+                    }
 
                 val noteParts = mutableListOf<String>()
                 if (row.category.isNotBlank()) noteParts += row.category
