@@ -98,6 +98,9 @@ tasks.withType<Test> {
     testLogging {
         showStandardStreams = true
     }
+
+    // Ermöglicht dynamisches Laden des ByteBuddy/Mockito Agents ohne zukünftige Warnung
+    jvmArgs("-XX:+EnableDynamicAgentLoading")
 }
 
 // Code Quality & Formatting
