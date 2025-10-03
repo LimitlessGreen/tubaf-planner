@@ -1,0 +1,24 @@
+spring:
+  config:
+    activate:
+      on-profile: postgres-int
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    # URL, Username, Password werden dynamisch durch @DynamicPropertySource aus dem Test gesetzt
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        show_sql: false
+        format_sql: true
+  flyway:
+    enabled: true
+    # Basis + vendor-spezifische Migrationen
+    locations: classpath:db/migration,classpath:db/migration_postgresql
+    baseline-on-migrate: true
+
+logging:
+  level:
+    de.tubaf.planner: INFO
+    org.hibernate.SQL: WARN
