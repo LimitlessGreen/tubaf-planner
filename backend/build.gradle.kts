@@ -59,8 +59,8 @@ dependencies {
 	
 	// Web Scraping & HTTP
 	implementation("org.jsoup:jsoup:1.18.1")
-	implementation("com.squareup.okhttp3:okhttp:4.12.0")
-	implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
+	implementation("com.squareup.okhttp3:okhttp:5.1.0")
+	implementation("com.squareup.okhttp3:okhttp-urlconnection:5.1.0")
 	implementation("io.ktor:ktor-client-core:2.3.12")
 	implementation("io.ktor:ktor-client-cio:2.3.12")
 	
