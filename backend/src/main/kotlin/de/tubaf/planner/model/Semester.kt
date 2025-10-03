@@ -26,8 +26,7 @@ class Semester(
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: LocalDateTime = LocalDateTime.now()
 
-    @Column(name = "updated_at")
-    var updatedAt: LocalDateTime? = null
+    @Column(name = "updated_at") var updatedAt: LocalDateTime? = null
 
     @OneToMany(mappedBy = "semester", cascade = [CascadeType.ALL], fetch = FetchType.LAZY)
     var courses: MutableSet<Course> = mutableSetOf()

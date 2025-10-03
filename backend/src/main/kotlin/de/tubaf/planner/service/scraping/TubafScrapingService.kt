@@ -6,7 +6,6 @@ import de.tubaf.planner.model.Lecturer
 import de.tubaf.planner.model.Room
 import de.tubaf.planner.model.ScheduleEntry
 import de.tubaf.planner.model.Semester
-import de.tubaf.planner.model.StudyProgram
 import de.tubaf.planner.repository.CourseRepository
 import de.tubaf.planner.repository.CourseTypeRepository
 import de.tubaf.planner.repository.LecturerRepository
@@ -18,6 +17,11 @@ import de.tubaf.planner.service.SemesterService
 import jakarta.annotation.PreDestroy
 import java.net.CookieManager
 import java.net.CookiePolicy
+import java.net.Inet4Address
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.DayOfWeek
@@ -29,18 +33,18 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicReference
+import okhttp3.Dns
 import okhttp3.FormBody
+import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import okhttp3.JavaNetCookieJar
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 
 @Service
 open class TubafScrapingService(
@@ -54,18 +58,26 @@ open class TubafScrapingService(
     private val studyProgramRepository: StudyProgramRepository,
     @Value("\${tubaf.scraper.base-url:https://evlvz.hrz.tu-freiberg.de/~vover}")
     private val baseUrl: String,
-    @Value("\${tubaf.scraper.user-agent:Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36}")
+    @Value(
+        "\${tubaf.scraper.user-agent:Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36}"
+    )
     private val userAgent: String,
 ) {
     private val logger = LoggerFactory.getLogger(TubafScrapingService::class.java)
     private val timeFormatter = DateTimeFormatter.ofPattern("H:mm")
     private val progressTracker = ScrapingProgressTracker()
-    private val executor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "scraping-worker").apply { isDaemon = true }
-    }
+    private val httpProxy: Proxy = detectProxy()
+    private val executor =
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "scraping-worker").apply { isDaemon = true }
+        }
     private val activeJob = AtomicReference<Future<*>?>(null)
     private val jobLock = Any()
     @Volatile private var cancellationMessage: String? = null
+
+    companion object {
+        private const val DEFAULT_PROXY_PORT = 8080
+    }
 
     fun isJobRunning(): Boolean {
         val current = activeJob.get()
@@ -73,9 +85,7 @@ open class TubafScrapingService(
     }
 
     fun startDiscoveryJob(): Boolean {
-        return submitJob("Starte Discovery-Scraping") {
-            discoverAndScrapeAvailableSemesters()
-        }
+        return submitJob("Starte Discovery-Scraping") { discoverAndScrapeAvailableSemesters() }
     }
 
     fun startRemoteScrapingJob(semesterIdentifiers: List<String>): Boolean {
@@ -91,9 +101,7 @@ open class TubafScrapingService(
         val semester =
             semesterService.getAllSemesters().find { it.id == semesterId }
                 ?: throw IllegalArgumentException("Semester mit ID $semesterId nicht gefunden")
-        return submitJob("Starte Scraping für ${semester.name}") {
-            scrapeSemesterData(semester)
-        }
+        return submitJob("Starte Scraping für ${semester.name}") { scrapeSemesterData(semester) }
     }
 
     @PreDestroy
@@ -112,7 +120,9 @@ open class TubafScrapingService(
         )
 
         if (semesterOptions.isEmpty()) {
-            logger.warn("Keine Semester auf der TUBAF-Seite gefunden – verwende vorhandene Semester aus der Datenbank")
+            logger.warn(
+                "Keine Semester auf der TUBAF-Seite gefunden – verwende vorhandene Semester aus der Datenbank"
+            )
             progressTracker.finish("Keine Semester auf der Webseite gefunden")
             return semesterService.getAllSemesters().map { scrapeSemesterData(it) }
         }
@@ -121,19 +131,26 @@ open class TubafScrapingService(
         try {
             for ((index, option) in semesterOptions.withIndex()) {
                 ensureNotCancelled()
-                logger.info("[{} / {}] Entdeckt: {}", index + 1, semesterOptions.size, option.displayName)
+                logger.info(
+                    "[{} / {}] Entdeckt: {}",
+                    index + 1,
+                    semesterOptions.size,
+                    option.displayName
+                )
                 progressTracker.log("INFO", "Scraping ${option.displayName}")
 
                 session.selectSemester(option)
                 val semester = getOrCreateSemester(option)
-                val semesterResult = scrapeSemesterDataWithSession(session, semester, trackProgress = false)
+                val semesterResult =
+                    scrapeSemesterDataWithSession(session, semester, trackProgress = false)
                 results += semesterResult
 
                 progressTracker.update(
                     task = "Scraping ${option.displayName}",
                     processed = index + 1,
                     total = semesterOptions.size,
-                    message = "${option.displayName}: ${semesterResult.totalEntries} Einträge (neu ${semesterResult.newEntries}, aktualisiert ${semesterResult.updatedEntries})"
+                    message =
+                        "${option.displayName}: ${semesterResult.totalEntries} Einträge (neu ${semesterResult.newEntries}, aktualisiert ${semesterResult.updatedEntries})"
                 )
             }
 
@@ -186,11 +203,18 @@ open class TubafScrapingService(
         val options = session.fetchSemesterOptions()
         val lookup = buildSemesterLookup(options)
 
+        logger.debug("Gefundene Remote-Semester: {}", options.map { it.displayName })
+        logger.debug("Verfügbare Schlüssel: {}", lookup.keys)
+
         val matchedOptions = linkedMapOf<String, SemesterOption>()
         semesterIdentifiers.forEach { identifier ->
             val normalizedIdentifier = normalize(identifier)
-            val option = lookup[normalizedIdentifier]
-                ?: throw IllegalArgumentException("Semester '$identifier' wurde auf der TUBAF-Seite nicht gefunden")
+            logger.debug("Prüfe Semester '{}' mit Schlüssel '{}'", identifier, normalizedIdentifier)
+            val option =
+                lookup[normalizedIdentifier]
+                    ?: throw IllegalArgumentException(
+                        "Semester '$identifier' wurde auf der TUBAF-Seite nicht gefunden"
+                    )
             matchedOptions.putIfAbsent(option.displayName, option)
         }
 
@@ -216,7 +240,8 @@ open class TubafScrapingService(
                     task = "Scraping ${option.displayName}",
                     processed = index + 1,
                     total = matchedOptions.size,
-                    message = "${option.displayName}: ${result.totalEntries} Einträge (neu ${result.newEntries}, aktualisiert ${result.updatedEntries})"
+                    message =
+                        "${option.displayName}: ${result.totalEntries} Einträge (neu ${result.newEntries}, aktualisiert ${result.updatedEntries})"
                 )
             }
 
@@ -236,8 +261,11 @@ open class TubafScrapingService(
         requireNotNull(semester.id) { "Semester muss vor dem Scraping persistiert sein" }
 
         val session = TubafScraperSession()
-        val semesterOption = session.fetchSemesterOptions().find { matchesSemesterOption(it, semester) }
-            ?: throw IllegalArgumentException("Semester '${semester.name}' wurde auf der TUBAF-Seite nicht gefunden")
+        val semesterOption =
+            session.fetchSemesterOptions().find { matchesSemesterOption(it, semester) }
+                ?: throw IllegalArgumentException(
+                    "Semester '${semester.name}' wurde auf der TUBAF-Seite nicht gefunden"
+                )
 
         session.selectSemester(semesterOption)
         return scrapeSemesterDataWithSession(session, semester, trackProgress = true)
@@ -254,7 +282,10 @@ open class TubafScrapingService(
         return try {
             val programs = session.fetchStudyPrograms()
             logger.info("Gefundene Studiengänge für {}: {}", semester.name, programs.size)
-            progressTracker.log("INFO", "📚 ${programs.size} Studiengänge gefunden für ${semester.name}")
+            progressTracker.log(
+                "INFO",
+                "📚 ${programs.size} Studiengänge gefunden für ${semester.name}"
+            )
 
             if (trackProgress) {
                 progressTracker.start(
@@ -264,31 +295,31 @@ open class TubafScrapingService(
                 )
             }
 
-        programs.forEachIndexed { index, program ->
-            ensureNotCancelled()
-            logger.info(
-                "   [{} / {}] Verarbeite Studiengang {} ({})",
-                index + 1,
-                programs.size,
-                program.code,
-                program.displayName,
-            )
-
-            val programStats = scrapeStudyProgram(session, semester, scrapingRun.id!!, program)
-            stats.totalEntries += programStats.totalEntries
-            stats.newEntries += programStats.newEntries
-            stats.updatedEntries += programStats.updatedEntries
-            stats.studyProgramsProcessed += programStats.studyProgramsProcessed
-
-            if (trackProgress) {
-                progressTracker.update(
-                    task = "${semester.shortName ?: semester.name}: ${program.code}",
-                    processed = index + 1,
-                    total = programs.size,
-                    message = "${program.displayName}: ${programStats.totalEntries} Einträge"
+            programs.forEachIndexed { index, program ->
+                ensureNotCancelled()
+                logger.info(
+                    "   [{} / {}] Verarbeite Studiengang {} ({})",
+                    index + 1,
+                    programs.size,
+                    program.code,
+                    program.displayName,
                 )
+
+                val programStats = scrapeStudyProgram(session, semester, scrapingRun.id!!, program)
+                stats.totalEntries += programStats.totalEntries
+                stats.newEntries += programStats.newEntries
+                stats.updatedEntries += programStats.updatedEntries
+                stats.studyProgramsProcessed += programStats.studyProgramsProcessed
+
+                if (trackProgress) {
+                    progressTracker.update(
+                        task = "${semester.shortName ?: semester.name}: ${program.code}",
+                        processed = index + 1,
+                        total = programs.size,
+                        message = "${program.displayName}: ${programStats.totalEntries} Einträge"
+                    )
+                }
             }
-        }
 
             changeTrackingService.completeScrapingRun(
                 scrapingRun.id!!,
@@ -312,7 +343,10 @@ open class TubafScrapingService(
             Thread.currentThread().interrupt()
             throw ex
         } catch (ex: Exception) {
-            changeTrackingService.failScrapingRun(scrapingRun.id!!, ex.message ?: ex.javaClass.simpleName)
+            changeTrackingService.failScrapingRun(
+                scrapingRun.id!!,
+                ex.message ?: ex.javaClass.simpleName
+            )
             if (trackProgress) {
                 progressTracker.fail("Scraping ${semester.name} fehlgeschlagen: ${ex.message}")
             }
@@ -341,11 +375,12 @@ open class TubafScrapingService(
 
         for ((index, fachSemester) in fachSemesterOptions.withIndex()) {
             ensureNotCancelled()
-            val document = if (fachSemester.isPostRequired) {
-                session.openProgramSemester(program, fachSemester.value)
-            } else {
-                initialDoc
-            }
+            val document =
+                if (fachSemester.isPostRequired) {
+                    session.openProgramSemester(program, fachSemester.value)
+                } else {
+                    initialDoc
+                }
 
             val rows = parseScheduleRows(document, program, fachSemester.value)
             if (rows.isNotEmpty()) {
@@ -376,25 +411,32 @@ open class TubafScrapingService(
             val timeRange = parseTimeRange(row.time)
 
             if (dayOfWeek == null || timeRange == null) {
-                logger.debug("      Überspringe Zeile wegen ungültiger Zeit/Tag: {} - {}", row.day, row.time)
+                logger.debug(
+                    "      Überspringe Zeile wegen ungültiger Zeit/Tag: {} - {}",
+                    row.day,
+                    row.time
+                )
                 continue
             }
 
             val courseType = getOrCreateCourseType(row.courseType, scrapingRunId)
             val lecturer = getOrCreateLecturer(row.lecturer, scrapingRunId)
             val room = getOrCreateRoom(row.room, scrapingRunId)
-            val course = getOrCreateCourse(row.courseTitle, semester, lecturer, courseType, scrapingRunId)
+            val course =
+                getOrCreateCourse(row.courseTitle, semester, lecturer, courseType, scrapingRunId)
             attachCourseToStudyProgram(course, row.studyProgram, row.fachSemester)
 
             // Lade Course mit scheduleEntries, um LazyInitializationException zu vermeiden
-            val courseWithEntries = courseRepository.findByIdWithScheduleEntries(course.id!!) ?: course
-            
-            val existingEntry = courseWithEntries.scheduleEntries.firstOrNull {
-                it.dayOfWeek == dayOfWeek &&
-                    it.startTime == timeRange.first &&
-                    it.endTime == timeRange.second &&
-                    it.room.code.equals(room.code, ignoreCase = true)
-            }
+            val courseWithEntries =
+                courseRepository.findByIdWithScheduleEntries(course.id!!) ?: course
+
+            val existingEntry =
+                courseWithEntries.scheduleEntries.firstOrNull {
+                    it.dayOfWeek == dayOfWeek &&
+                        it.startTime == timeRange.first &&
+                        it.endTime == timeRange.second &&
+                        it.room.code.equals(room.code, ignoreCase = true)
+                }
 
             val noteParts = mutableListOf<String>()
             if (row.category.isNotBlank()) noteParts += row.category
@@ -438,15 +480,16 @@ open class TubafScrapingService(
             } else {
                 val newEntry =
                     ScheduleEntry(
-                        course = course,
-                        room = room,
-                        dayOfWeek = dayOfWeek,
-                        startTime = timeRange.first,
-                        endTime = timeRange.second,
-                    ).apply {
-                        weekPattern = row.weekPattern.ifBlank { null }
-                        notes = notesText.ifBlank { null }
-                    }
+                            course = course,
+                            room = room,
+                            dayOfWeek = dayOfWeek,
+                            startTime = timeRange.first,
+                            endTime = timeRange.second,
+                        )
+                        .apply {
+                            weekPattern = row.weekPattern.ifBlank { null }
+                            notes = notesText.ifBlank { null }
+                        }
 
                 val saved = scheduleEntryRepository.save(newEntry)
                 courseWithEntries.scheduleEntries.add(saved)
@@ -458,10 +501,16 @@ open class TubafScrapingService(
         }
     }
 
-    private fun attachCourseToStudyProgram(course: Course, option: StudyProgramOption, fachSemester: String) {
+    private fun attachCourseToStudyProgram(
+        course: Course,
+        option: StudyProgramOption,
+        fachSemester: String
+    ) {
         val studyProgram =
             studyProgramRepository.findByCode(option.code)
-                ?: studyProgramRepository.findByNameContainingIgnoreCase(option.displayName).firstOrNull()
+                ?: studyProgramRepository
+                    .findByNameContainingIgnoreCase(option.displayName)
+                    .firstOrNull()
                 ?: return
 
         val alreadyLinked = course.courseStudyPrograms.any { it.studyProgram.id == studyProgram.id }
@@ -481,14 +530,14 @@ open class TubafScrapingService(
         fachSemester: String,
     ): List<ScrapedRow> {
         val scheduleTable =
-            document.select("table")
-                .firstOrNull { table ->
-                    val headers = table.select("th").map { it.text().lowercase(Locale.GERMAN) }
-                    headers.contains("titel") && headers.contains("zeit")
-                }
+            document.select("table").firstOrNull { table ->
+                val headers = table.select("th").map { it.text().lowercase(Locale.GERMAN) }
+                headers.contains("titel") && headers.contains("zeit")
+            }
 
         if (scheduleTable == null) {
-            val msg = "🔍 Keine Tabelle mit 'Titel' und 'Zeit' Headers für ${program.code} ($fachSemester)"
+            val msg =
+                "🔍 Keine Tabelle mit 'Titel' und 'Zeit' Headers für ${program.code} ($fachSemester)"
             logger.info(msg)
             progressTracker.log("WARN", msg)
             progressTracker.log("INFO", "🔍 Verfügbare Tabellen: ${document.select("table").size}")
@@ -501,7 +550,11 @@ open class TubafScrapingService(
             return emptyList()
         }
 
-        logger.info("📋 Gefundene Schedule-Tabelle für {} ({}), starte Parsing...", program.code, fachSemester)
+        logger.info(
+            "📋 Gefundene Schedule-Tabelle für {} ({}), starte Parsing...",
+            program.code,
+            fachSemester
+        )
         progressTracker.log("INFO", "📋 Parse Tabelle für ${program.code} ($fachSemester)")
 
         val rows = mutableListOf<ScrapedRow>()
@@ -540,8 +593,13 @@ open class TubafScrapingService(
             val infoId = extractInfoId(cells[7])
 
             if (courseTitle.isBlank()) {
-                logger.trace("⏭️  Überspringe Zeile ohne Titel: {} Zellen, Type={}, Dozent={}, Tag={}", 
-                    cells.size, courseType, lecturer, day)
+                logger.trace(
+                    "⏭️  Überspringe Zeile ohne Titel: {} Zellen, Type={}, Dozent={}, Tag={}",
+                    cells.size,
+                    courseType,
+                    lecturer,
+                    day
+                )
                 skippedRows++
                 continue
             }
@@ -564,10 +622,16 @@ open class TubafScrapingService(
         }
 
         if (rows.isEmpty() && skippedRows > 0) {
-            progressTracker.log("WARN", "⚠️  ${program.code} ($fachSemester): $skippedRows Zeilen ohne Titel übersprungen")
+            progressTracker.log(
+                "WARN",
+                "⚠️  ${program.code} ($fachSemester): $skippedRows Zeilen ohne Titel übersprungen"
+            )
         }
         if (rows.isNotEmpty()) {
-            progressTracker.log("INFO", "✅ ${program.code} ($fachSemester): ${rows.size} Kurse gefunden")
+            progressTracker.log(
+                "INFO",
+                "✅ ${program.code} ($fachSemester): ${rows.size} Kurse gefunden"
+            )
         }
 
         return rows
@@ -575,12 +639,7 @@ open class TubafScrapingService(
 
     private fun extractInfoId(cell: Element): String {
         val link = cell.selectFirst("a[href*=satz=]")
-        return link
-            ?.attr("href")
-            ?.substringAfter("satz=")
-            ?.substringBefore('&')
-            ?.trim()
-            ?: ""
+        return link?.attr("href")?.substringAfter("satz=")?.substringBefore('&')?.trim() ?: ""
     }
 
     private fun parseFachSemesterOptions(document: Document): List<FachSemesterOption> {
@@ -625,7 +684,8 @@ open class TubafScrapingService(
             if (updated) {
                 courseRepository.save(existing)
             }
-            // Lade das Course-Objekt neu mit scheduleEntries, um LazyInitializationException zu vermeiden
+            // Lade das Course-Objekt neu mit scheduleEntries, um LazyInitializationException zu
+            // vermeiden
             return courseRepository.findByIdWithScheduleEntries(existing.id!!) ?: existing
         }
 
@@ -647,14 +707,18 @@ open class TubafScrapingService(
         val code =
             when {
                 normalized.startsWith("V") -> "V"
-                normalized.startsWith("Ü") || normalized.startsWith("UE") || normalized.startsWith("U") -> "Ü"
+                normalized.startsWith("Ü") ||
+                    normalized.startsWith("UE") ||
+                    normalized.startsWith("U") -> "Ü"
                 normalized.startsWith("S") -> "S"
                 normalized.startsWith("P") || normalized.startsWith("PR") -> "P"
                 normalized.startsWith("B") -> "B"
                 else -> normalized.take(1).ifBlank { "V" }
             }
 
-        courseTypeRepository.findByCode(code)?.let { return it }
+        courseTypeRepository.findByCode(code)?.let {
+            return it
+        }
 
         val newType = CourseType(code = code, name = typeText.ifBlank { code })
         val saved = courseTypeRepository.save(newType)
@@ -664,9 +728,19 @@ open class TubafScrapingService(
 
     private fun getOrCreateLecturer(rawText: String, scrapingRunId: Long): Lecturer {
         val text = rawText.trim().ifBlank { "N.N." }
-        lecturerRepository.findByNameContainingIgnoreCaseAndActive(text).firstOrNull()?.let { return it }
+        val normalized = text.take(200)
+        if (normalized.length < text.length) {
+            logger.warn(
+                "Kürze Dozierendenamen von {} auf {} Zeichen",
+                text.length,
+                normalized.length
+            )
+        }
+        lecturerRepository.findByNameContainingIgnoreCaseAndActive(normalized).firstOrNull()?.let {
+            return it
+        }
 
-        val lecturer = Lecturer(name = text)
+        val lecturer = Lecturer(name = normalized)
         val saved = lecturerRepository.save(lecturer)
         changeTrackingService.logEntityCreated(scrapingRunId, "Lecturer", saved.id!!)
         return saved
@@ -674,7 +748,9 @@ open class TubafScrapingService(
 
     private fun getOrCreateRoom(rawText: String, scrapingRunId: Long): Room {
         val value = rawText.trim().ifBlank { "TBD" }
-        roomRepository.findByCode(value)?.let { return it }
+        roomRepository.findByCode(value)?.let {
+            return it
+        }
 
         val (building, number) = parseRoomCode(value)
         val room = Room(code = value, building = building, roomNumber = number)
@@ -744,8 +820,9 @@ open class TubafScrapingService(
     }
 
     private fun normalize(value: String): String {
-        return value.lowercase(Locale.GERMAN)
-            .replace(" ", "")
+        return value
+            .lowercase(Locale.GERMAN)
+            .replace(Regex("\\s+"), "")
             .replace("-", "")
             .replace("/", "")
             .replace("_", "")
@@ -753,11 +830,12 @@ open class TubafScrapingService(
 
     private fun buildPossibleShortNames(displayName: String): Set<String> {
         val normalized = displayName.lowercase(Locale.GERMAN)
-        val prefix = when {
-            normalized.contains("winter") -> "WS"
-            normalized.contains("sommer") -> "SS"
-            else -> displayName.take(2).uppercase(Locale.GERMAN)
-        }
+        val prefix =
+            when {
+                normalized.contains("winter") -> "WS"
+                normalized.contains("sommer") -> "SS"
+                else -> displayName.take(2).uppercase(Locale.GERMAN)
+            }
 
         val numbers = Regex("\\d{4}").findAll(displayName).map { it.value }.toList()
         val variants = mutableSetOf<String>()
@@ -793,7 +871,13 @@ open class TubafScrapingService(
     private fun createSemesterFromOption(option: SemesterOption): Semester {
         val (start, end) = mapSemesterDates(option.displayName)
         val shortName = buildShortName(option.displayName)
-        return semesterService.createSemester(option.displayName, shortName, start, end, active = false)
+        return semesterService.createSemester(
+            option.displayName,
+            shortName,
+            start,
+            end,
+            active = false
+        )
     }
 
     private fun buildShortName(displayName: String): String {
@@ -852,25 +936,29 @@ open class TubafScrapingService(
             cancellationMessage = null
             progressTracker.reset(initialMessage)
 
-            val future = executor.submit {
-                try {
-                    task()
-                } catch (ex: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    val message = cancellationMessage
-                    cancellationMessage = null
-                    if (message != null) {
-                        progressTracker.reset(message)
-                    } else {
-                        val snapshot = progressTracker.snapshot()
-                        if (snapshot.status == ScrapingStatus.RUNNING) {
-                            progressTracker.fail("Scraping abgebrochen")
+            val future =
+                executor.submit {
+                    try {
+                        task()
+                    } catch (ex: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        val message = cancellationMessage
+                        cancellationMessage = null
+                        if (message != null) {
+                            progressTracker.reset(message)
+                        } else {
+                            val snapshot = progressTracker.snapshot()
+                            if (snapshot.status == ScrapingStatus.RUNNING) {
+                                progressTracker.fail("Scraping abgebrochen")
+                            }
                         }
+                    } catch (ex: Exception) {
+                        logger.error("Scraping-Thread fehlgeschlagen", ex)
+                        progressTracker.fail("Scraping fehlgeschlagen: ${ex.message}")
+                    } finally {
+                        activeJob.set(null)
                     }
-                } finally {
-                    activeJob.set(null)
                 }
-            }
 
             activeJob.set(future)
             return true
@@ -883,13 +971,70 @@ open class TubafScrapingService(
         }
     }
 
-    private inner class TubafScraperSession {
+    private fun detectProxy(): Proxy {
+        val propertyEntry =
+            sequenceOf(
+                    System.getProperty("https.proxyHost") to System.getProperty("https.proxyPort"),
+                    System.getProperty("http.proxyHost") to System.getProperty("http.proxyPort")
+                )
+                .firstOrNull { !it.first.isNullOrBlank() }
+
+        val hostAndPort =
+            when {
+                propertyEntry != null -> {
+                    val host = propertyEntry.first!!.trim()
+                    val port = propertyEntry.second?.toIntOrNull() ?: DEFAULT_PROXY_PORT
+                    host to port
+                }
+                else -> {
+                    sequenceOf("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy")
+                        .mapNotNull { System.getenv(it) }
+                        .mapNotNull { parseProxyUrl(it) }
+                        .firstOrNull()
+                }
+            }
+
+        if (hostAndPort == null) {
+            logger.info("Kein Proxy konfiguriert – direkte Verbindung wird genutzt")
+            return Proxy.NO_PROXY
+        }
+
+        logger.info("Nutze Proxy {}:{} für HTTP-Anfragen", hostAndPort.first, hostAndPort.second)
+        return Proxy(Proxy.Type.HTTP, InetSocketAddress(hostAndPort.first, hostAndPort.second))
+    }
+
+    private fun parseProxyUrl(value: String): Pair<String, Int>? {
+        if (value.isBlank()) return null
+        return try {
+            val normalized = if (value.contains("://")) value else "http://$value"
+            val uri = URI(normalized)
+            val host = uri.host ?: return null
+            val port = if (uri.port != -1) uri.port else DEFAULT_PROXY_PORT
+            host to port
+        } catch (ex: Exception) {
+            logger.warn("Konnte Proxy-URL nicht parsen: {}", value, ex)
+            null
+        }
+    }
+
+    protected inner class TubafScraperSession {
         private val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
-        private val httpClient = OkHttpClient.Builder()
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .cookieJar(JavaNetCookieJar(cookieManager))
-            .build()
+        private val httpClient =
+            OkHttpClient.Builder()
+                .proxy(httpProxy)
+                .dns(
+                    object : Dns {
+                        override fun lookup(hostname: String): List<InetAddress> {
+                            val results = Dns.SYSTEM.lookup(hostname)
+                            val ipv4Addresses = results.filterIsInstance<Inet4Address>()
+                            return if (ipv4Addresses.isNotEmpty()) ipv4Addresses else results
+                        }
+                    }
+                )
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .cookieJar(JavaNetCookieJar(cookieManager))
+                .build()
 
         private val trimmedBase = baseUrl.trimEnd('/')
 
@@ -902,23 +1047,24 @@ open class TubafScrapingService(
         fun selectSemester(option: SemesterOption) {
             logger.info("🔄 Wechsle zu Semester: {}", option.displayName)
             progressTracker.log("INFO", "🔄 Wechsle zu: ${option.displayName}")
-            
+
             // Log Cookies vor dem Request
             val cookiesBefore = cookieManager.cookieStore.cookies.size
             logger.info("🍪 Cookies vor selectSemester: {}", cookiesBefore)
-            
-            val formData = mapOf(
-                "sem_wahl" to option.displayName,
-                "wechsel" to "4",
-                "senden" to "Auswählen",
-            )
+
+            val formData =
+                mapOf(
+                    "sem_wahl" to option.displayName,
+                    "wechsel" to "4",
+                    "senden" to "Auswählen",
+                )
             val response = request("POST", "index.html", formData, referer = url("index.html"))
-            
+
             // Log Cookies nach dem Request
             val cookiesAfter = cookieManager.cookieStore.cookies.size
             logger.info("🍪 Cookies nach selectSemester: {}", cookiesAfter)
             progressTracker.log("INFO", "🍪 Cookies: $cookiesAfter")
-            
+
             // Prüfe, welches Semester jetzt aktiv ist
             val activeOption = response.selectFirst("select[name=sem_wahl] option[selected]")
             val activeSemester = activeOption?.text()?.trim() ?: "unbekannt"
@@ -931,22 +1077,25 @@ open class TubafScrapingService(
             val cookiesBefore = cookieManager.cookieStore.cookies.size
             logger.info("🍪 Cookies vor fetchStudyPrograms: {}", cookiesBefore)
             progressTracker.log("INFO", "🍪 Cookies vor verz.html: $cookiesBefore")
-            
+
             val document = request("GET", "verz.html", referer = url("index.html"))
-            
+
             // Prüfe das aktive Semester auf verz.html
             val activeOption = document.selectFirst("select[name=sem_wahl] option[selected]")
             val activeSemester = activeOption?.text()?.trim() ?: "unbekannt"
             logger.info("📅 Semester auf verz.html: {}", activeSemester)
             progressTracker.log("INFO", "📅 Semester: $activeSemester")
-            
+
             val tableCount = document.select("table").size
             logger.info("🔎 fetchStudyPrograms: Lade verz.html, Tabellen gefunden: {}", tableCount)
             progressTracker.log("INFO", "🔎 verz.html geladen: $tableCount Tabellen gefunden")
-            
+
             // Die Studiengänge-Tabelle ist die, die Links zu stgvrz.html enthält
-            val table = document.select("table").firstOrNull { it.select("a[href^=stgvrz.html]").isNotEmpty() }
-            
+            val table =
+                document.select("table").firstOrNull {
+                    it.select("a[href^=stgvrz.html]").isNotEmpty()
+                }
+
             if (table == null) {
                 logger.warn("⚠️  Keine Tabelle mit stgvrz.html Links gefunden!")
                 progressTracker.log("WARN", "⚠️  Keine passende Tabelle gefunden!")
@@ -962,10 +1111,10 @@ open class TubafScrapingService(
 
             logger.info("✅ Tabelle gefunden! Text: {}", table.text().take(200))
             progressTracker.log("INFO", "✅ Tabelle gefunden: ${table.text().take(100)}")
-            
+
             val programs = mutableListOf<StudyProgramOption>()
             var currentFaculty = ""
-            
+
             val rowCount = table.select("tr").size
             logger.info("📊 Zeilen in Tabelle: {}", rowCount)
             progressTracker.log("INFO", "📊 $rowCount Zeilen in Tabelle")
@@ -979,10 +1128,13 @@ open class TubafScrapingService(
 
                 val link = row.selectFirst("a[href^=stgvrz.html]")
                 if (link == null) {
-                    logger.debug("⏭️  Überspringe Zeile ohne stgvrz.html Link: {}", row.text().take(50))
+                    logger.debug(
+                        "⏭️  Überspringe Zeile ohne stgvrz.html Link: {}",
+                        row.text().take(50)
+                    )
                     continue
                 }
-                
+
                 val href = link.attr("href")
                 val codeCell = row.selectFirst("td")
                 val code = codeCell?.text()?.trim().orEmpty()
@@ -1001,7 +1153,7 @@ open class TubafScrapingService(
                     )
                 logger.debug("➕ Studiengang: {} ({})", displayName, code)
             }
-            
+
             logger.info("✨ Insgesamt {} Studiengänge gefunden", programs.size)
             progressTracker.log("INFO", "✨ ${programs.size} Studiengänge gefunden")
 
@@ -1013,13 +1165,14 @@ open class TubafScrapingService(
         }
 
         fun openProgramSemester(program: StudyProgramOption, fachSemester: String): Document {
-            val formData = mapOf(
-                "stdg" to program.code,
-                "stdg1" to program.displayName,
-                "semest" to fachSemester,
-                "popup3" to "",
-            )
-            return request("POST", "stgvrz.html", formData, referer = url("stgvrz.html?stdg=${program.code}"))
+            val formData =
+                mapOf(
+                    "stdg" to program.code,
+                    "stdg1" to program.displayName,
+                    "semest" to fachSemester,
+                    "popup3" to "",
+                )
+            return request("POST", "stgvrz.html", formData, referer = url(program.href))
         }
 
         private fun request(
@@ -1033,7 +1186,10 @@ open class TubafScrapingService(
                 Request.Builder()
                     .url(targetUrl)
                     .header("User-Agent", userAgent)
-                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    .header(
+                        "Accept",
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    )
                     .header("Accept-Language", "de-DE,de;q=0.9,en;q=0.6")
                     .header("Connection", "keep-alive")
 
@@ -1043,9 +1199,7 @@ open class TubafScrapingService(
 
             if (method.equals("POST", ignoreCase = true) && formData != null) {
                 val formBuilder = FormBody.Builder(StandardCharsets.UTF_8)
-                formData.forEach { (key, value) ->
-                    formBuilder.add(key, value)
-                }
+                formData.forEach { (key, value) -> formBuilder.add(key, value) }
                 builder.post(formBuilder.build())
             } else {
                 builder.get()
@@ -1053,7 +1207,9 @@ open class TubafScrapingService(
 
             httpClient.newCall(builder.build()).execute().use { response ->
                 ensureSuccess(response)
-                val body = response.body?.string() ?: throw IllegalStateException("Leere Antwort vom Server")
+                val body =
+                    response.body?.string()
+                        ?: throw IllegalStateException("Leere Antwort vom Server")
                 return Jsoup.parse(body, targetUrl)
             }
         }
@@ -1061,7 +1217,9 @@ open class TubafScrapingService(
         private fun ensureSuccess(response: Response) {
             if (!response.isSuccessful) {
                 val bodySnippet = response.body?.string()?.take(200)
-                throw IllegalStateException("HTTP ${response.code} für ${response.request.url} – ${bodySnippet ?: ""}")
+                throw IllegalStateException(
+                    "HTTP ${response.code} für ${response.request.url} – ${bodySnippet ?: ""}"
+                )
             }
         }
 
@@ -1078,7 +1236,8 @@ open class TubafScrapingService(
         val query = href.substringAfter('?', "")
         if (query.isBlank()) return emptyMap()
 
-        return query.split('&')
+        return query
+            .split('&')
             .mapNotNull { pair ->
                 if (!pair.contains('=')) return@mapNotNull null
                 val (key, value) = pair.split('=', limit = 2)
@@ -1087,11 +1246,11 @@ open class TubafScrapingService(
             .toMap()
     }
 
-    private data class SemesterOption(val displayName: String)
+    protected data class SemesterOption(val displayName: String)
 
     private data class FachSemesterOption(val value: String, val isPostRequired: Boolean)
 
-    private data class StudyProgramOption(
+    protected data class StudyProgramOption(
         val code: String,
         val displayName: String,
         val faculty: String,
@@ -1172,22 +1331,22 @@ private class ScrapingProgressTracker {
     private val lock = Any()
     private var state = ScrapingProgressSnapshot()
 
-    fun snapshot(): ScrapingProgressSnapshot = synchronized(lock) {
-        state.copy(logs = state.logs.takeLast(MAX_LOGS))
-    }
+    fun snapshot(): ScrapingProgressSnapshot =
+        synchronized(lock) { state.copy(logs = state.logs.takeLast(MAX_LOGS)) }
 
     fun start(totalCount: Int, task: String, message: String) {
         synchronized(lock) {
             val sanitizedTotal = if (totalCount < 0) 0 else totalCount
-            state = ScrapingProgressSnapshot(
-                status = ScrapingStatus.RUNNING,
-                currentTask = task,
-                processedCount = 0,
-                totalCount = sanitizedTotal,
-                progress = computeProgress(0, sanitizedTotal),
-                message = message,
-                logs = appendLog(state.logs, "INFO", message)
-            )
+            state =
+                ScrapingProgressSnapshot(
+                    status = ScrapingStatus.RUNNING,
+                    currentTask = task,
+                    processedCount = 0,
+                    totalCount = sanitizedTotal,
+                    progress = computeProgress(0, sanitizedTotal),
+                    message = message,
+                    logs = appendLog(state.logs, "INFO", message)
+                )
         }
     }
 
@@ -1195,72 +1354,76 @@ private class ScrapingProgressTracker {
         synchronized(lock) {
             val newTotal = total ?: state.totalCount
             val newProgress = computeProgress(processed, newTotal)
-            val updatedLogs = if (!message.isNullOrBlank()) appendLog(state.logs, "INFO", message) else state.logs
-            state = state.copy(
-                currentTask = task ?: state.currentTask,
-                processedCount = processed,
-                totalCount = newTotal,
-                progress = newProgress,
-                message = message ?: state.message,
-                logs = updatedLogs
-            )
+            val updatedLogs =
+                if (!message.isNullOrBlank()) appendLog(state.logs, "INFO", message) else state.logs
+            state =
+                state.copy(
+                    currentTask = task ?: state.currentTask,
+                    processedCount = processed,
+                    totalCount = newTotal,
+                    progress = newProgress,
+                    message = message ?: state.message,
+                    logs = updatedLogs
+                )
         }
     }
 
     fun log(level: String, message: String) {
         synchronized(lock) {
-            state = state.copy(
-                message = message,
-                logs = appendLog(state.logs, level, message)
-            )
+            state = state.copy(message = message, logs = appendLog(state.logs, level, message))
         }
     }
 
     fun finish(message: String) {
         synchronized(lock) {
-            state = state.copy(
-                status = ScrapingStatus.COMPLETED,
-                currentTask = "Bereit",
-                processedCount = state.totalCount,
-                progress = 100,
-                message = message,
-                logs = appendLog(state.logs, "INFO", message)
-            )
+            state =
+                state.copy(
+                    status = ScrapingStatus.COMPLETED,
+                    currentTask = "Bereit",
+                    processedCount = state.totalCount,
+                    progress = 100,
+                    message = message,
+                    logs = appendLog(state.logs, "INFO", message)
+                )
         }
     }
 
     fun fail(message: String) {
         synchronized(lock) {
-            state = state.copy(
-                status = ScrapingStatus.FAILED,
-                message = message,
-                logs = appendLog(state.logs, "ERROR", message)
-            )
+            state =
+                state.copy(
+                    status = ScrapingStatus.FAILED,
+                    message = message,
+                    logs = appendLog(state.logs, "ERROR", message)
+                )
         }
     }
 
     fun pause(message: String) {
         synchronized(lock) {
-            state = state.copy(
-                status = ScrapingStatus.PAUSED,
-                message = message,
-                logs = appendLog(state.logs, "WARN", message)
-            )
+            state =
+                state.copy(
+                    status = ScrapingStatus.PAUSED,
+                    message = message,
+                    logs = appendLog(state.logs, "WARN", message)
+                )
         }
     }
 
     fun reset(message: String? = null) {
         synchronized(lock) {
-            val logs = if (!message.isNullOrBlank()) appendLog(state.logs, "INFO", message) else state.logs
-            state = ScrapingProgressSnapshot(
-                status = ScrapingStatus.IDLE,
-                currentTask = "Bereit",
-                processedCount = 0,
-                totalCount = 0,
-                progress = 0,
-                message = message,
-                logs = logs.takeLast(MAX_LOGS)
-            )
+            val logs =
+                if (!message.isNullOrBlank()) appendLog(state.logs, "INFO", message) else state.logs
+            state =
+                ScrapingProgressSnapshot(
+                    status = ScrapingStatus.IDLE,
+                    currentTask = "Bereit",
+                    processedCount = 0,
+                    totalCount = 0,
+                    progress = 0,
+                    message = message,
+                    logs = logs.takeLast(MAX_LOGS)
+                )
         }
     }
 
@@ -1273,7 +1436,11 @@ private class ScrapingProgressTracker {
             return ((clamped.toDouble() / total.toDouble()) * 100).toInt().coerceIn(0, 100)
         }
 
-        private fun appendLog(current: List<ScrapingLogEntry>, level: String, message: String): List<ScrapingLogEntry> {
+        private fun appendLog(
+            current: List<ScrapingLogEntry>,
+            level: String,
+            message: String
+        ): List<ScrapingLogEntry> {
             val entry = ScrapingLogEntry(level, message)
             return (current + entry).takeLast(MAX_LOGS)
         }

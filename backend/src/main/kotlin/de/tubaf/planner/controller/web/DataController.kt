@@ -1,8 +1,8 @@
 package de.tubaf.planner.controller.web
 
 import de.tubaf.planner.service.*
-import de.tubaf.planner.service.scraping.TubafScrapingService
 import de.tubaf.planner.service.scraping.ScrapingStatus
+import de.tubaf.planner.service.scraping.TubafScrapingService
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.*

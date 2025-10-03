@@ -8,9 +8,7 @@ import org.springframework.web.bind.annotation.*
 @RestController
 @RequestMapping("/api/semesters")
 @Tag(name = "Semesters", description = "Semester Management API")
-class SemesterApiController(
-    private val semesterService: SemesterService
-) {
+class SemesterApiController(private val semesterService: SemesterService) {
 
     @GetMapping
     @Operation(summary = "Get all semesters")
@@ -22,7 +20,7 @@ class SemesterApiController(
 
     @GetMapping("/{id}")
     @Operation(summary = "Get semester by ID")
-    fun getSemesterById(@PathVariable id: Long) = 
+    fun getSemesterById(@PathVariable id: Long) =
         semesterService.getAllSemesters().find { it.id == id }
             ?: throw IllegalArgumentException("Semester not found")
 

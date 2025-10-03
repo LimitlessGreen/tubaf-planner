@@ -81,8 +81,9 @@ interface CourseRepository : JpaRepository<Course, Long> {
 
     @Query(
         """
-        SELECT c FROM Course c 
-        LEFT JOIN FETCH c.scheduleEntries
+        SELECT c FROM Course c
+        LEFT JOIN FETCH c.scheduleEntries se
+        LEFT JOIN FETCH se.room
         WHERE c.id = :courseId
         """
     )
