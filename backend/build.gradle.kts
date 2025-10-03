@@ -53,7 +53,7 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("com.h2database:h2") // For development/testing
     // Web Scraping & HTTP
-    implementation("org.jsoup:jsoup:1.18.1")
+    implementation("org.jsoup:jsoup:1.21.2")
     implementation("com.squareup.okhttp3:okhttp:5.1.0")
     implementation("com.squareup.okhttp3:okhttp-urlconnection:5.1.0")
     implementation("io.ktor:ktor-client-core:2.3.12")
