@@ -2,9 +2,6 @@ package de.tubaf.planner.controller.api
 
 import de.tubaf.planner.model.ScheduleEntry
 import de.tubaf.planner.service.*
-import de.tubaf.planner.service.scraping.TubafScrapingService
-import de.tubaf.planner.service.scraping.ScrapingProgressSnapshot
-import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
@@ -12,7 +9,6 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api")
 class ApiController(
     private val scheduleService: ScheduleService,
-    private val scrapingService: TubafScrapingService,
     private val semesterService: SemesterService,
     private val courseService: CourseService
 ) {
@@ -36,58 +32,7 @@ class ApiController(
             .body(ByteArray(0))
     }
 
-    @PostMapping("/scraping/start")
-    fun startScraping(
-        @RequestParam(required = false) semesterId: Long?,
-        @RequestParam(defaultValue = "incremental") mode: String,
-        @RequestParam(defaultValue = "3") maxRetries: Int,
-        @RequestParam(defaultValue = "true") enableNotifications: Boolean,
-        @RequestParam(defaultValue = "true") saveChanges: Boolean
-    ): ResponseEntity<Map<String, Any>> {
-        return try {
-            val started = when {
-                semesterId != null -> scrapingService.startLocalScrapingJob(semesterId)
-                else -> scrapingService.startDiscoveryJob()
-            }
-
-            if (!started) {
-                ResponseEntity.status(HttpStatus.CONFLICT).body(
-                    mapOf("success" to false, "message" to "Bereits laufender Scraping-Prozess")
-                )
-            } else {
-                ResponseEntity.ok(
-                    mapOf(
-                        "success" to true,
-                        "message" to "Scraping gestartet"
-                    )
-                )
-            }
-        } catch (e: Exception) {
-            ResponseEntity.ok(
-                mapOf(
-                    "success" to false,
-                    "message" to (e.message ?: "Fehler beim Starten des Scrapings")
-                )
-            )
-        }
-    }
-
-    @PostMapping("/scraping/pause")
-    fun pauseScraping(): ResponseEntity<ScrapingProgressSnapshot> {
-        scrapingService.pauseScraping()
-        return ResponseEntity.ok(scrapingService.getProgressSnapshot())
-    }
-
-    @PostMapping("/scraping/stop")
-    fun stopScraping(): ResponseEntity<ScrapingProgressSnapshot> {
-        scrapingService.stopScraping()
-        return ResponseEntity.ok(scrapingService.getProgressSnapshot())
-    }
-
-    @GetMapping("/scraping/status")
-    fun getScrapingStatus(): ResponseEntity<ScrapingProgressSnapshot> {
-        return ResponseEntity.ok(scrapingService.getProgressSnapshot())
-    }
+    // Scraping endpoints moved to ScrapingController for better organization
 
     @GetMapping("/stats/dashboard")
     fun getDashboardStats(): ResponseEntity<Map<String, Any>> {

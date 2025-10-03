@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout/base :: layout(~{::title}, ~{::content})}">
+<head>
+    <title>Scraping Management</title>
+</head>
+<body>
+    <div th:fragment="content">
+        <div class="container-fluid py-4">
+            <!-- Header -->
+            <div class="row">
+                <div class="col-md-8">
+                    <h1 class="h2 mb-4">
+                        <i class="fas fa-spider me-2"></i>Scraping Management
+                    </h1>
+                </div>
+                <div class="col-md-4 text-end d-flex justify-content-end gap-2">
+                    <button id="discoverScrapingBtn" class="btn btn-outline-primary" onclick="discoverAndScrape()">
+                        <i class="fas fa-compass me-1"></i>Semester entdecken &amp; scrapen
+                    </button>
+                    <button id="startScrapingBtn" class="btn btn-success" onclick="startScraping()">
+                        <i class="fas fa-play me-1"></i>Scraping starten
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3 mb-3">
+                    <div class="card border-primary">
+                        <div class="card-body text-center">
+                            <i class="fas fa-spider fa-2x text-primary mb-2"></i>
+                            <h6 class="card-title">Status</h6>
+                            <span id="scrapingStatus" class="badge" 
+                                  th:class="${scrapingActive} ? 'bg-success' : 'bg-secondary'"
+                                  th:text="${scrapingActive} ? 'Läuft' : 'Gestoppt'">Status</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3 mb-3">
+                    <div class="card border-success">
+                        <div class="card-body text-center">
+                            <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                            <h6 class="card-title">Erfolgreiche Läufe</h6>
+                            <h4 class="text-success" th:text="${successfulRuns ?: '0'}">0</h4>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3 mb-3">
+                    <div class="card border-warning">
+                        <div class="card-body text-center">
+                            <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+                            <h6 class="card-title">Fehlerhafte Läufe</h6>
+                            <h4 class="text-warning" th:text="${failedRuns ?: '0'}">0</h4>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3 mb-3">
+                    <div class="card border-info">
+                        <div class="card-body text-center">
+                            <i class="fas fa-clock fa-2x text-info mb-2"></i>
+                            <h6 class="card-title">Letzter Lauf</h6>
+                            <p class="mb-0">
+                                <span th:if="${lastRun}" th:text="${#temporals.format(lastRun.startTime, 'dd.MM.yyyy')}">--</span>
+                                <br><small th:if="${lastRun}" th:text="${#temporals.format(lastRun.startTime, 'HH:mm')}">--:--</small>
+                                <span th:unless="${lastRun}" class="text-muted">Nie</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-cogs me-2"></i>Steuerung
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="scrapingForm">
+                                <div class="row">
+                                    <div class="col-12 mb-3">
+                                        <label class="form-label">Scraping-Umfang</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="scrapingScope" id="scopeRemoteAll" value="remote-all" checked>
+                                            <label class="form-check-label" for="scopeRemoteAll">
+                                                Alle Semester von der TUBAF-Webseite scrapen
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="scrapingScope" id="scopeRemoteSelected" value="remote-selected">
+                                            <label class="form-check-label" for="scopeRemoteSelected">
+                                                Ausgewählte Semester von der TUBAF-Webseite scrapen
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="scrapingScope" id="scopeLocal" value="local">
+                                            <label class="form-check-label" for="scopeLocal">
+                                                Einzelnes lokales Semester scrapen
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="targetSemester" class="form-label">Lokales Semester</label>
+                                        <select class="form-select" name="semesterId" id="targetSemester" disabled>
+                                            <option value="">Bitte auswählen</option>
+                                            <option th:each="semester : ${availableSemesters}" 
+                                                    th:value="${semester.id}" 
+                                                    th:text="${semester.name}">Semester</option>
+                                        </select>
+                                        <small class="text-muted">Aktiv, wenn "Einzelnes lokales Semester" gewählt ist.</small>
+                                    </div>
+                                    
+                                    <div class="col-md-4 mb-3">
+                                        <label for="scrapingMode" class="form-label">Modus</label>
+                                        <select class="form-select" name="mode" id="scrapingMode">
+                                            <option value="incremental">Inkrementell</option>
+                                            <option value="full">Vollständig</option>
+                                            <option value="changes-only">Nur Änderungen</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="col-md-4 mb-3">
+                                        <label for="maxRetries" class="form-label">Max. Wiederholungen</label>
+                                        <input type="number" class="form-control" name="maxRetries" 
+                                               id="maxRetries" value="3" min="0" max="10">
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-12 mb-3">
+                                        <label for="remoteSemesters" class="form-label">Semester von der TUBAF-Webseite</label>
+                                        <select class="form-select" id="remoteSemesters" multiple size="6" disabled>
+                                            <option disabled>Semesterliste wird geladen …</option>
+                                        </select>
+                                        <small class="text-muted">Mehrere Semester mit Strg/⌘ auswählen. Aktiv, wenn "Ausgewählte Semester" gewählt ist.</small>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" 
+                                                   name="enableNotifications" id="enableNotifications" checked>
+                                            <label class="form-check-label" for="enableNotifications">
+                                                Benachrichtigungen aktivieren
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" 
+                                                   name="saveChanges" id="saveChanges" checked>
+                                            <label class="form-check-label" for="saveChanges">
+                                                Änderungen protokollieren
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-success" onclick="startScraping()">
+                                        <i class="fas fa-play me-1"></i>Starten
+                                    </button>
+                                    <button type="button" class="btn btn-warning" onclick="pauseScraping()">
+                                        <i class="fas fa-pause me-1"></i>Pausieren
+                                    </button>
+                                    <button type="button" class="btn btn-danger" onclick="stopScraping()">
+                                        <i class="fas fa-stop me-1"></i>Stoppen
+                                    </button>
+                                    <button type="button" class="btn btn-info" onclick="refreshStatus()">
+                                        <i class="fas fa-refresh me-1"></i>Status aktualisieren
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress and Logs -->
+            <div class="row">
+                <div class="col-lg-8 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-list me-2"></i>Logs
+                            </h5>
+                        </div>
+                        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                            <div id="logContainer">
+                                <div th:if="${logs.empty}" class="text-muted text-center py-3">
+                                    <i class="fas fa-info-circle me-1"></i>Keine Logs verfügbar
+                                </div>
+                                
+                                <div th:unless="${logs.empty}">
+                                    <div th:each="log : ${logs}" class="mb-2">
+                                        <div class="d-flex justify-content-between">
+                                            <span class="badge" 
+                                                  th:class="${log.level == 'ERROR'} ? 'bg-danger' : 
+                                                           ${log.level == 'WARN'} ? 'bg-warning' : 
+                                                           ${log.level == 'INFO'} ? 'bg-info' : 'bg-secondary'"
+                                                  th:text="${log.level}">Level</span>
+                                            <small class="text-muted" th:text="${#temporals.format(log.timestamp, 'HH:mm:ss')}">Time</small>
+                                        </div>
+                                        <p class="mb-0" th:text="${log.message}">Log message</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-4 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-chart-line me-2"></i>Fortschritt
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="progressContainer">
+                                <div class="mb-3">
+                                    <label class="form-label">Gesamt-Fortschritt</label>
+                                    <div class="progress">
+                                        <div id="overallProgress" class="progress-bar" role="progressbar" 
+                                             style="width: 0%" th:style="'width: ' + ${overallProgress ?: 0} + '%'"></div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Aktuelle Aufgabe</label>
+                                    <p id="currentTask" class="text-muted" th:text="${currentTask ?: 'Bereit'}">Bereit</p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <small class="text-muted">
+                                        <i class="fas fa-calendar me-1"></i>Verarbeitet: 
+                                        <span id="processedCount" th:text="${processedCount ?: '0'}">0</span> von 
+                                        <span id="totalCount" th:text="${totalCount ?: '0'}">0</span>
+                                    </small>
+                                </div>
+                                
+                                <div th:if="${estimatedTimeRemaining}">
+                                    <small class="text-info">
+                                        <i class="fas fa-clock me-1"></i>Verbleibt: 
+                                        <span th:text="${estimatedTimeRemaining}">--</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        let scrapingInterval;
+        
+        function startScraping() {
+            const targetSemester = document.getElementById('targetSemester').value;
+            const selectedRemote = getSelectedRemoteSemesters();
+            const enableNotifications = document.getElementById('enableNotifications').checked;
+            const scope = document.querySelector('input[name="scrapingScope"]:checked')?.value || 'remote-all';
+
+            let request;
+
+            switch (scope) {
+                case 'local':
+                    if (!targetSemester) {
+                        alert('Bitte wähle ein lokales Semester aus.');
+                        return;
+                    }
+                    request = fetch(`/api/scraping/semester/${targetSemester}/scrape`, { method: 'POST' });
+                    break;
+                case 'remote-selected':
+                    if (selectedRemote.length === 0) {
+                        alert('Bitte wähle mindestens ein Semester aus der TUBAF-Liste aus.');
+                        return;
+                    }
+                    request = fetch('/api/scraping/scrape-remote', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ semesters: selectedRemote })
+                    });
+                    break;
+                case 'remote-all':
+                default:
+                    request = fetch('/api/scraping/discover-and-scrape', { method: 'POST' });
+                    break;
+            }
+
+            request
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.success === false) {
+                        alert('Scraping fehlgeschlagen: ' + (data.message || 'Unbekannter Fehler'));
+                        return;
+                    }
+
+                    const message = buildSuccessMessage(data);
+                    if (enableNotifications) {
+                        alert(message);
+                    }
+                    updateScrapingStatus('running');
+                    startStatusPolling();
+                    refreshStatus();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Fehler beim Starten des Scrapings');
+                });
+        }
+
+        function discoverAndScrape() {
+            discoverScrapingBtnDisabled(true);
+            const enableNotifications = document.getElementById('enableNotifications').checked;
+
+            const remoteAllRadio = document.getElementById('scopeRemoteAll');
+            if (remoteAllRadio) {
+                remoteAllRadio.checked = true;
+                updateScopeUI();
+            }
+
+            const request = fetch('/api/scraping/discover-and-scrape', { method: 'POST' });
+
+            request
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.success === false) {
+                        alert('Scraping fehlgeschlagen: ' + (data.message || 'Unbekannter Fehler'));
+                        return;
+                    }
+
+                    const message = buildSuccessMessage(data);
+                    if (enableNotifications) {
+                        alert(message);
+                    }
+                    updateScrapingStatus('running');
+                    startStatusPolling();
+                    refreshStatus();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Fehler beim Scraping der ausgewählten Semester');
+                })
+               .finally(() => discoverScrapingBtnDisabled(false));
+        }
+
+        function discoverScrapingBtnDisabled(disabled) {
+            const btn = document.getElementById('discoverScrapingBtn');
+            if (!btn) return;
+            btn.disabled = disabled;
+            btn.classList.toggle('disabled', disabled);
+        }
+
+        function buildSuccessMessage(data) {
+            if (!data) {
+                return 'Scraping abgeschlossen.';
+            }
+
+            if (typeof data.totalEntries === 'number') {
+                return `Scraping erfolgreich: ${data.totalEntries} Einträge verarbeitet (${data.newEntries || 0} neu, ${data.updatedEntries || 0} aktualisiert).`;
+            }
+
+            const total = data.totalEntries || 0;
+            const created = data.newEntries || 0;
+            const updated = data.updatedEntries || 0;
+            const semesters = data.semestersProcessed || 0;
+
+            if (total > 0 || created > 0 || updated > 0 || semesters > 0) {
+                return `Scraping erfolgreich: ${semesters} Semester verarbeitet, ${total} Einträge (${created} neu, ${updated} aktualisiert).`;
+            }
+
+            return data.message || 'Scraping gestartet.';
+        }
+
+        function getSelectedRemoteSemesters() {
+            const select = document.getElementById('remoteSemesters');
+            if (!select) {
+                return [];
+            }
+            return Array.from(select.selectedOptions).map(option => option.value);
+        }
+
+        function updateScopeUI() {
+            const scope = document.querySelector('input[name="scrapingScope"]:checked')?.value || 'remote-all';
+            const remoteSelect = document.getElementById('remoteSemesters');
+            const targetSelect = document.getElementById('targetSemester');
+
+            if (remoteSelect) {
+                remoteSelect.disabled = scope !== 'remote-selected';
+            }
+            if (targetSelect) {
+                targetSelect.disabled = scope !== 'local';
+            }
+        }
+
+        function pauseScraping() {
+            fetch('/api/scraping/pause', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    updateScrapingStatus(data.status);
+                    updateProgress(data);
+                    updateLogs(data.logs);
+                });
+        }
+        
+        function stopScraping() {
+            fetch('/api/scraping/stop', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    updateScrapingStatus(data.status);
+                    updateProgress(data);
+                    updateLogs(data.logs);
+                    stopStatusPolling();
+                });
+        }
+        
+        function refreshStatus() {
+            fetch('/api/scraping/status')
+            .then(response => response.json())
+            .then(data => {
+                updateScrapingStatus(data.status);
+                updateProgress(data);
+                updateLogs(data.logs);
+            });
+        }
+        
+        function updateScrapingStatus(status) {
+            if (!status) {
+                status = 'idle';
+            }
+            const statusElement = document.getElementById('scrapingStatus');
+            statusElement.className = 'badge';
+
+            const normalized = status.toString().toLowerCase();
+
+            switch(normalized) {
+                case 'running':
+                    statusElement.classList.add('bg-success');
+                    statusElement.textContent = 'Läuft';
+                    break;
+                case 'paused':
+                    statusElement.classList.add('bg-warning');
+                    statusElement.textContent = 'Pausiert';
+                    break;
+                case 'completed':
+                    statusElement.classList.add('bg-info');
+                    statusElement.textContent = 'Abgeschlossen';
+                    break;
+                case 'failed':
+                    statusElement.classList.add('bg-danger');
+                    statusElement.textContent = 'Fehlgeschlagen';
+                    break;
+                default:
+                    statusElement.classList.add('bg-secondary');
+                    statusElement.textContent = 'Gestoppt';
+            }
+
+            if (normalized !== 'running') {
+                stopStatusPolling();
+            }
+        }
+        
+        function updateProgress(data) {
+            if (!data) {
+                return;
+            }
+
+            const progressValue = data.progress || 0;
+            document.getElementById('overallProgress').style.width = progressValue + '%';
+
+            const taskLabel = data.message || data.currentTask || 'Bereit';
+            document.getElementById('currentTask').textContent = taskLabel;
+
+            document.getElementById('processedCount').textContent = data.processedCount || 0;
+            document.getElementById('totalCount').textContent = data.totalCount || 0;
+        }
+        
+        function updateLogs(logs) {
+            if (logs && logs.length > 0) {
+                const container = document.getElementById('logContainer');
+                container.innerHTML = '';
+                
+                logs.forEach(log => {
+                    const logElement = document.createElement('div');
+                    logElement.className = 'mb-2';
+                    logElement.innerHTML = `
+                        <div class="d-flex justify-content-between">
+                            <span class="badge bg-${log.level === 'ERROR' ? 'danger' : log.level === 'WARN' ? 'warning' : 'info'}">${log.level}</span>
+                            <small class="text-muted">${new Date(log.timestamp).toLocaleTimeString()}</small>
+                        </div>
+                        <p class="mb-0">${log.message}</p>
+                    `;
+                    container.appendChild(logElement);
+                });
+            }
+        }
+        
+        function startStatusPolling() {
+            scrapingInterval = setInterval(refreshStatus, 2000);
+        }
+        
+        function stopStatusPolling() {
+            if (scrapingInterval) {
+                clearInterval(scrapingInterval);
+            }
+        }
+
+        function loadRemoteSemesters() {
+            const select = document.getElementById('remoteSemesters');
+            if (!select) {
+                return;
+            }
+
+            select.innerHTML = '<option disabled>Lade Semesterliste …</option>';
+
+            fetch('/api/scraping/remote-semesters')
+                .then(response => response.json())
+                .then(data => {
+                    select.innerHTML = '';
+
+                    if (!data || data.length === 0) {
+                        const option = document.createElement('option');
+                        option.disabled = true;
+                        option.textContent = 'Keine Semester gefunden';
+                        select.appendChild(option);
+                        return;
+                    }
+
+                    data.forEach(item => {
+                        const option = document.createElement('option');
+                        option.value = item.displayName;
+                        option.dataset.shortName = item.shortName;
+                        option.textContent = item.shortName
+                            ? `${item.displayName} (${item.shortName})`
+                            : item.displayName;
+                        select.appendChild(option);
+                    });
+
+                    updateScopeUI();
+                })
+                .catch(error => {
+                    console.error('Fehler beim Laden der Semesterliste:', error);
+                    select.innerHTML = '';
+                    const option = document.createElement('option');
+                    option.disabled = true;
+                    option.textContent = 'Fehler beim Laden der Semesterliste';
+                    select.appendChild(option);
+                });
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshStatus();
+            loadRemoteSemesters();
+            updateScopeUI();
+            document.querySelectorAll('input[name="scrapingScope"]').forEach(radio => {
+                radio.addEventListener('change', updateScopeUI);
+            });
+        });
+        </script>
+    </div>
+</body>
+</html>

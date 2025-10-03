@@ -78,4 +78,13 @@ interface CourseRepository : JpaRepository<Course, Long> {
         @Param("searchTerm") searchTerm: String,
         @Param("semesterId") semesterId: Long
     ): List<Course>
+
+    @Query(
+        """
+        SELECT c FROM Course c 
+        LEFT JOIN FETCH c.scheduleEntries
+        WHERE c.id = :courseId
+        """
+    )
+    fun findByIdWithScheduleEntries(@Param("courseId") courseId: Long): Course?
 }

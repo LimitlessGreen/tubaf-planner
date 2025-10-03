@@ -43,8 +43,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
-@Transactional
-class TubafScrapingService(
+open class TubafScrapingService(
     private val changeTrackingService: ChangeTrackingService,
     private val semesterService: SemesterService,
     private val courseRepository: CourseRepository,
@@ -125,8 +124,8 @@ class TubafScrapingService(
                 logger.info("[{} / {}] Entdeckt: {}", index + 1, semesterOptions.size, option.displayName)
                 progressTracker.log("INFO", "Scraping ${option.displayName}")
 
-                val semester = getOrCreateSemester(option)
                 session.selectSemester(option)
+                val semester = getOrCreateSemester(option)
                 val semesterResult = scrapeSemesterDataWithSession(session, semester, trackProgress = false)
                 results += semesterResult
 
@@ -244,7 +243,7 @@ class TubafScrapingService(
         return scrapeSemesterDataWithSession(session, semester, trackProgress = true)
     }
 
-    private fun scrapeSemesterDataWithSession(
+    protected open fun scrapeSemesterDataWithSession(
         session: TubafScraperSession,
         semester: Semester,
         trackProgress: Boolean,
@@ -255,6 +254,7 @@ class TubafScrapingService(
         return try {
             val programs = session.fetchStudyPrograms()
             logger.info("Gefundene Studiengänge für {}: {}", semester.name, programs.size)
+            progressTracker.log("INFO", "📚 ${programs.size} Studiengänge gefunden für ${semester.name}")
 
             if (trackProgress) {
                 progressTracker.start(
@@ -386,7 +386,10 @@ class TubafScrapingService(
             val course = getOrCreateCourse(row.courseTitle, semester, lecturer, courseType, scrapingRunId)
             attachCourseToStudyProgram(course, row.studyProgram, row.fachSemester)
 
-            val existingEntry = course.scheduleEntries.firstOrNull {
+            // Lade Course mit scheduleEntries, um LazyInitializationException zu vermeiden
+            val courseWithEntries = courseRepository.findByIdWithScheduleEntries(course.id!!) ?: course
+            
+            val existingEntry = courseWithEntries.scheduleEntries.firstOrNull {
                 it.dayOfWeek == dayOfWeek &&
                     it.startTime == timeRange.first &&
                     it.endTime == timeRange.second &&
@@ -446,7 +449,7 @@ class TubafScrapingService(
                     }
 
                 val saved = scheduleEntryRepository.save(newEntry)
-                course.scheduleEntries.add(saved)
+                courseWithEntries.scheduleEntries.add(saved)
                 changeTrackingService.logEntityCreated(scrapingRunId, "ScheduleEntry", saved.id!!)
                 stats.newEntries += 1
             }
@@ -483,11 +486,28 @@ class TubafScrapingService(
                     val headers = table.select("th").map { it.text().lowercase(Locale.GERMAN) }
                     headers.contains("titel") && headers.contains("zeit")
                 }
-                ?: return emptyList()
+
+        if (scheduleTable == null) {
+            val msg = "🔍 Keine Tabelle mit 'Titel' und 'Zeit' Headers für ${program.code} ($fachSemester)"
+            logger.info(msg)
+            progressTracker.log("WARN", msg)
+            progressTracker.log("INFO", "🔍 Verfügbare Tabellen: ${document.select("table").size}")
+            document.select("table").forEachIndexed { index, table ->
+                val headers = table.select("th").map { it.text() }
+                if (headers.isNotEmpty()) {
+                    progressTracker.log("INFO", "  Tabelle $index: Headers = $headers")
+                }
+            }
+            return emptyList()
+        }
+
+        logger.info("📋 Gefundene Schedule-Tabelle für {} ({}), starte Parsing...", program.code, fachSemester)
+        progressTracker.log("INFO", "📋 Parse Tabelle für ${program.code} ($fachSemester)")
 
         val rows = mutableListOf<ScrapedRow>()
         var currentCategory = ""
         var currentGroup = ""
+        var skippedRows = 0
 
         for (row in scheduleTable.select("tr")) {
             val cells = row.select("td")
@@ -520,6 +540,9 @@ class TubafScrapingService(
             val infoId = extractInfoId(cells[7])
 
             if (courseTitle.isBlank()) {
+                logger.trace("⏭️  Überspringe Zeile ohne Titel: {} Zellen, Type={}, Dozent={}, Tag={}", 
+                    cells.size, courseType, lecturer, day)
+                skippedRows++
                 continue
             }
 
@@ -538,6 +561,13 @@ class TubafScrapingService(
                     weekPattern = weekPattern,
                     infoId = infoId,
                 )
+        }
+
+        if (rows.isEmpty() && skippedRows > 0) {
+            progressTracker.log("WARN", "⚠️  ${program.code} ($fachSemester): $skippedRows Zeilen ohne Titel übersprungen")
+        }
+        if (rows.isNotEmpty()) {
+            progressTracker.log("INFO", "✅ ${program.code} ($fachSemester): ${rows.size} Kurse gefunden")
         }
 
         return rows
@@ -595,7 +625,8 @@ class TubafScrapingService(
             if (updated) {
                 courseRepository.save(existing)
             }
-            return existing
+            // Lade das Course-Objekt neu mit scheduleEntries, um LazyInitializationException zu vermeiden
+            return courseRepository.findByIdWithScheduleEntries(existing.id!!) ?: existing
         }
 
         val course =
@@ -606,6 +637,7 @@ class TubafScrapingService(
                 courseType = courseType,
             )
         val saved = courseRepository.save(course)
+        // scheduleEntries ist bereits initialisiert (leere Collection bei neuem Course)
         changeTrackingService.logEntityCreated(scrapingRunId, "Course", saved.id!!)
         return saved
     }
@@ -852,10 +884,11 @@ class TubafScrapingService(
     }
 
     private inner class TubafScraperSession {
+        private val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
         private val httpClient = OkHttpClient.Builder()
             .followRedirects(true)
             .followSslRedirects(true)
-            .cookieJar(JavaNetCookieJar(CookieManager(null, CookiePolicy.ACCEPT_ALL)))
+            .cookieJar(JavaNetCookieJar(cookieManager))
             .build()
 
         private val trimmedBase = baseUrl.trimEnd('/')
@@ -867,30 +900,89 @@ class TubafScrapingService(
         }
 
         fun selectSemester(option: SemesterOption) {
+            logger.info("🔄 Wechsle zu Semester: {}", option.displayName)
+            progressTracker.log("INFO", "🔄 Wechsle zu: ${option.displayName}")
+            
+            // Log Cookies vor dem Request
+            val cookiesBefore = cookieManager.cookieStore.cookies.size
+            logger.info("🍪 Cookies vor selectSemester: {}", cookiesBefore)
+            
             val formData = mapOf(
                 "sem_wahl" to option.displayName,
                 "wechsel" to "4",
                 "senden" to "Auswählen",
             )
-            request("POST", "index.html", formData, referer = url("index.html"))
+            val response = request("POST", "index.html", formData, referer = url("index.html"))
+            
+            // Log Cookies nach dem Request
+            val cookiesAfter = cookieManager.cookieStore.cookies.size
+            logger.info("🍪 Cookies nach selectSemester: {}", cookiesAfter)
+            progressTracker.log("INFO", "🍪 Cookies: $cookiesAfter")
+            
+            // Prüfe, welches Semester jetzt aktiv ist
+            val activeOption = response.selectFirst("select[name=sem_wahl] option[selected]")
+            val activeSemester = activeOption?.text()?.trim() ?: "unbekannt"
+            logger.info("✓ Aktives Semester nach Wechsel: {}", activeSemester)
+            progressTracker.log("INFO", "✓ Aktiv: $activeSemester")
         }
 
         fun fetchStudyPrograms(): List<StudyProgramOption> {
+            // Log Cookies vor dem Request
+            val cookiesBefore = cookieManager.cookieStore.cookies.size
+            logger.info("🍪 Cookies vor fetchStudyPrograms: {}", cookiesBefore)
+            progressTracker.log("INFO", "🍪 Cookies vor verz.html: $cookiesBefore")
+            
             val document = request("GET", "verz.html", referer = url("index.html"))
-            val table = document.select("table").firstOrNull { it.text().contains("Nach Studiengängen") }
-                ?: document.select("table").firstOrNull { it.select("a[href^=stgvrz.html]").isNotEmpty() }
-                ?: return emptyList()
+            
+            // Prüfe das aktive Semester auf verz.html
+            val activeOption = document.selectFirst("select[name=sem_wahl] option[selected]")
+            val activeSemester = activeOption?.text()?.trim() ?: "unbekannt"
+            logger.info("📅 Semester auf verz.html: {}", activeSemester)
+            progressTracker.log("INFO", "📅 Semester: $activeSemester")
+            
+            val tableCount = document.select("table").size
+            logger.info("🔎 fetchStudyPrograms: Lade verz.html, Tabellen gefunden: {}", tableCount)
+            progressTracker.log("INFO", "🔎 verz.html geladen: $tableCount Tabellen gefunden")
+            
+            // Die Studiengänge-Tabelle ist die, die Links zu stgvrz.html enthält
+            val table = document.select("table").firstOrNull { it.select("a[href^=stgvrz.html]").isNotEmpty() }
+            
+            if (table == null) {
+                logger.warn("⚠️  Keine Tabelle mit stgvrz.html Links gefunden!")
+                progressTracker.log("WARN", "⚠️  Keine passende Tabelle gefunden!")
+                logger.info("📄 Verfügbare Tabellen-Texte:")
+                progressTracker.log("INFO", "📄 Vorhandene Tabellen:")
+                document.select("table").take(5).forEachIndexed { index, t ->
+                    val text = t.text().take(100)
+                    logger.info("  Tabelle {}: {}", index, text)
+                    progressTracker.log("INFO", "  Tab $index: $text")
+                }
+                return emptyList()
+            }
 
+            logger.info("✅ Tabelle gefunden! Text: {}", table.text().take(200))
+            progressTracker.log("INFO", "✅ Tabelle gefunden: ${table.text().take(100)}")
+            
             val programs = mutableListOf<StudyProgramOption>()
             var currentFaculty = ""
+            
+            val rowCount = table.select("tr").size
+            logger.info("📊 Zeilen in Tabelle: {}", rowCount)
+            progressTracker.log("INFO", "📊 $rowCount Zeilen in Tabelle")
 
             for (row in table.select("tr")) {
                 if (row.select("b u").isNotEmpty()) {
                     currentFaculty = row.text().trim()
+                    logger.debug("📁 Fakultät: {}", currentFaculty)
                     continue
                 }
 
-                val link = row.selectFirst("a[href^=stgvrz.html]") ?: continue
+                val link = row.selectFirst("a[href^=stgvrz.html]")
+                if (link == null) {
+                    logger.debug("⏭️  Überspringe Zeile ohne stgvrz.html Link: {}", row.text().take(50))
+                    continue
+                }
+                
                 val href = link.attr("href")
                 val codeCell = row.selectFirst("td")
                 val code = codeCell?.text()?.trim().orEmpty()
@@ -907,7 +999,11 @@ class TubafScrapingService(
                         faculty = currentFaculty,
                         href = href,
                     )
+                logger.debug("➕ Studiengang: {} ({})", displayName, code)
             }
+            
+            logger.info("✨ Insgesamt {} Studiengänge gefunden", programs.size)
+            progressTracker.log("INFO", "✨ ${programs.size} Studiengänge gefunden")
 
             return programs
         }

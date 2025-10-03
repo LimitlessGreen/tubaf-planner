@@ -123,3 +123,152 @@ Diese URLs benötigen dieselbe Session (wegen Semesterkontext) und dieselben Par
 5. **Respectful Crawling:** Begrenze Request-Raten, da jede Aktion serverseitig Datenbankarbeit auslöst und der Dienst öffentlich für Studierende bereitsteht.
 6. **Antworten prüfen:** Überwache Statuscodes und Antwortgrößen, um Session-Timeouts oder Fehlermeldungen früh zu erkennen.
 
+---
+
+## 10. Aktuelle Implementierung im TUBAF Planner
+
+Der **TUBAF Planner** implementiert ein robustes Scraping-System basierend auf den oben beschriebenen Strategien. Die Implementierung nutzt **OkHttp3** als HTTP-Client und **JSoup** zum HTML-Parsing.
+
+### 10.1 Architektur
+
+```
+TubafScrapingService
+├── TubafScraperSession (Session-Management)
+│   ├── Cookie-Handling (JavaNetCookieJar + CookieManager)
+│   ├── fetchSemesterOptions() → Liest select[name=sem_wahl]
+│   ├── selectSemester() → POST mit sem_wahl + wechsel=4
+│   ├── fetchStudyPrograms() → Parst verz.html für Studiengänge
+│   ├── openProgram() → GET stgvrz.html?stdg=...
+│   └── openProgramSemester() → POST mit stdg, stdg1, semest
+├── Discovery Mode → Findet automatisch alle verfügbaren Semester
+├── Remote Scraping → Scrapt ausgewählte Remote-Semester
+└── Local Scraping → Scrapt bereits erstellte lokale Semester
+```
+
+### 10.2 Implementierte Features
+
+#### ✅ **Session-Management (Punkt 1)**
+- Persistente Cookie-Verwaltung über `JavaNetCookieJar`
+- `CookiePolicy.ACCEPT_ALL` für alle TUBAF-Cookies
+- Automatisches Session-Reuse über alle Requests hinweg
+
+```kotlin
+private val cookieManager = CookieManager().apply {
+    setCookiePolicy(CookiePolicy.ACCEPT_ALL)
+}
+private val httpClient = OkHttpClient.Builder()
+    .cookieJar(JavaNetCookieJar(cookieManager))
+    .build()
+```
+
+#### ✅ **Semester-Auswahl (Punkt 2)**
+- `fetchSemesterOptions()` extrahiert alle verfügbaren Semester aus `select[name=sem_wahl]`
+- `selectSemester()` sendet POST mit korrekten Parametern (`sem_wahl`, `wechsel=4`)
+- Semester-Matching unterstützt verschiedene Namensformate
+
+#### ✅ **Studiengangspläne (Punkt 7)**
+- `fetchStudyPrograms()` parst `verz.html` und extrahiert:
+  - Studiengangscodes (`stdg`)
+  - Klartextnamen (`stdg1`)
+  - Fakultätszuordnung
+  - Links zu `stgvrz.html`
+- `openProgramSemester()` scrapt Fachsemester-spezifische Pläne
+- Tabellen werden robust mit JSoup geparst (Spalten: Art, Titel, Lehrende, Tag, Zeit, Raum, Woche)
+
+#### ✅ **Intelligentes Entity-Management**
+- **Dozenten**: Automatische Erkennung und Wiederverwendung basierend auf Name + Titel
+- **Räume**: Parsing von "Gebäude/Raum"-Format (z.B. "PRÜ-1103")
+- **Kurse**: Deduplizierung nach Name + Semester
+- **Veranstaltungstypen**: Dynamische Erstellung (V, Ü, P, S, etc.)
+
+#### ✅ **Change Tracking**
+- Jeder Scraping-Lauf wird protokolliert (`ScrapingRun`)
+- Änderungen an Entitäten werden getrackt (`ChangeLog`)
+- Statistiken: Anzahl neuer/aktualisierter Einträge pro Run
+
+#### ✅ **Progress Tracking**
+- Echtzeit-Fortschrittsanzeige während des Scrapings
+- Detaillierte Logs mit Emoji-Indikatoren für bessere Lesbarkeit
+- Job-Management mit Abbruch-Funktionalität
+
+### 10.3 NICHT implementierte Features
+
+Diese Features aus der Dokumentation wurden bewusst **nicht** implementiert, da sie für den aktuellen Anwendungsfall nicht benötigt werden:
+
+#### ❌ **Suchformular (Punkt 3-4)**
+- `suche.html` mit Checkbox-Feldern `suche[XYZx]`
+- `ergebnis.html` mit Suchergebnissen
+- **Grund**: Wir scrapen direkt über Studiengangspläne, was vollständigere Daten liefert
+
+#### ❌ **Detailinformationen (Punkt 5)**
+- `info.html?satz=<ID>` für Veranstaltungsdetails
+- **Potenzial**: Könnte für zusätzliche Infos (Hörergruppen, Turnus-Details) nützlich sein
+- **Status**: Optional für zukünftige Erweiterung
+
+#### ❌ **Raumpläne (Punkt 6)**
+- `plaene.html` und `druck_html.html?art=raumplan`
+- **Potenzial**: Feature-Request für Raumverwaltung
+- **Status**: Nicht prioritär, da Rauminformationen bereits aus Studiengangsplänen extrahiert werden
+
+#### ❌ **Weitere Endpunkte (Punkt 8)**
+- `samml.html`, `stundenplan.html`, `druck_pdf.html`
+- **Grund**: Unsere HTML-Parsing-Strategie ist bereits ausreichend
+
+### 10.4 API-Endpunkte
+
+Das Scraping-System bietet folgende REST-Endpunkte:
+
+```
+POST /api/scraping/discover-and-scrape
+  → Findet automatisch alle verfügbaren Semester und scrapt sie
+
+POST /api/scraping/scrape-remote
+  → Scrapt ausgewählte Remote-Semester
+  Body: { "semesterIdentifiers": ["Sommersemester 2024", ...] }
+
+POST /api/scraping/semester/{semesterId}/scrape
+  → Scrapt ein bereits erstelltes lokales Semester
+
+GET /api/scraping/status
+  → Gibt aktuellen Scraping-Status zurück (läuft/idle)
+
+POST /api/scraping/cancel
+  → Bricht laufendes Scraping ab
+```
+
+### 10.5 Logging & Monitoring
+
+Das System nutzt **umfangreiches Emoji-basiertes Logging** für bessere Übersicht:
+
+```
+🚀 Starting TUBAF scraping...
+🔧 Initializing browser...
+📚 Processing study program [1/25]: BAI
+👨‍🏫 Creating new lecturer: 'Prof. Dr. Müller'
+🏫 Using existing room: 'PRÜ-1103' (ID: 42)
+📚 Creating new course: 'Mathematik I' for semester 'WS24'
+✅ Schedule entry created for course 'Mathematik I' at 'Mo 08:00-09:30'
+🎉 FINAL RESULT: Scraping completed successfully!
+```
+
+### 10.6 Best Practices (implementiert)
+
+1. ✅ **Session-Reuse**: Alle Requests nutzen dieselbe Session mit persistenten Cookies
+2. ✅ **Dynamische Formulardaten**: Semester-Optionen werden zur Laufzeit ausgelesen
+3. ✅ **Referer-Header**: Korrekte Referer für alle POST-Requests
+4. ✅ **UTF-8 Encoding**: Sonderzeichen werden korrekt verarbeitet
+5. ✅ **Error Handling**: Detaillierte Fehlerbehandlung mit Retry-Logik
+6. ✅ **Transaction Management**: Spring `@Transactional` für Datenkonsistenz
+7. ✅ **Background Jobs**: Asynchrones Scraping mit Job-Management
+
+### 10.7 Erweiterungsmöglichkeiten
+
+Folgende Features könnten in Zukunft implementiert werden:
+
+1. **Detailinformationen via `info.html`**: Zusätzliche Veranstaltungsdetails (Hörergruppen, genauer Turnus)
+2. **Raumplan-Integration**: Scraping von `plaene.html` für Raumverwaltung
+3. **PDF-Export**: Nutzung von `druck_pdf.html` für Exportfunktionen
+4. **Suchfunktion**: Integration von `suche.html` für gezielte Abfragen
+5. **Incremental Updates**: Nur geänderte Daten scrapen statt kompletter Refresh
+
+---
