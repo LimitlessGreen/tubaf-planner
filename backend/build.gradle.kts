@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "de.tubaf"
-version = "0.0.1-SNAPSHOT"
+version = "0.1.0"
 description = "TUBAF Schedule Planning and Management System with Kotlin"
 
 java {

@@ -7,9 +7,9 @@ import jakarta.validation.constraints.Size
 @Entity
 @Table(name = "course_types")
 class CourseType(
-    @Column(name = "code", nullable = false, unique = true, length = 1)
+    @Column(name = "code", nullable = false, unique = true, length = 10)
     @field:NotBlank
-    @field:Size(min = 1, max = 1)
+    @field:Size(min = 1, max = 10)
     var code: String,
     @Column(name = "name", nullable = false, length = 50)
     @field:NotBlank
