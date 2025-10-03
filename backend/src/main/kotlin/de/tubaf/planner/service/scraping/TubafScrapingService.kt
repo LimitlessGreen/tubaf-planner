@@ -1,22 +1,36 @@
 package de.tubaf.planner.service.scraping
 
+import de.tubaf.planner.config.ScrapingConfiguration
 import de.tubaf.planner.model.Course
 import de.tubaf.planner.model.CourseType
 import de.tubaf.planner.model.Lecturer
 import de.tubaf.planner.model.Room
 import de.tubaf.planner.model.ScheduleEntry
 import de.tubaf.planner.model.Semester
-import de.tubaf.planner.model.StudyProgram
 import de.tubaf.planner.repository.CourseRepository
 import de.tubaf.planner.repository.CourseTypeRepository
 import de.tubaf.planner.repository.LecturerRepository
 import de.tubaf.planner.repository.RoomRepository
 import de.tubaf.planner.repository.ScheduleEntryRepository
 import de.tubaf.planner.repository.StudyProgramRepository
-import de.tubaf.planner.config.ScrapingConfiguration
 import de.tubaf.planner.service.ChangeTrackingService
 import de.tubaf.planner.service.SemesterService
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import jakarta.annotation.PreDestroy
+import okhttp3.FormBody
+import okhttp3.JavaNetCookieJar
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.net.CookieManager
 import java.net.CookiePolicy
 import java.net.URLDecoder
@@ -27,31 +41,14 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
-import okhttp3.FormBody
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.JavaNetCookieJar
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
-import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
-import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.support.TransactionTemplate
-import io.micrometer.core.instrument.MeterRegistry
-import io.micrometer.core.instrument.Timer
 
 @Service
 open class TubafScrapingService(
@@ -68,7 +65,9 @@ open class TubafScrapingService(
     private val meterRegistry: MeterRegistry,
     @Value("\${tubaf.scraper.base-url:https://evlvz.hrz.tu-freiberg.de/~vover}")
     private val baseUrl: String,
-    @Value("\${tubaf.scraper.user-agent:Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36}")
+    @Value(
+        "\${tubaf.scraper.user-agent:Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36}",
+    )
     private val userAgent: String,
 ) {
     private val logger = LoggerFactory.getLogger(TubafScrapingService::class.java)
@@ -79,11 +78,18 @@ open class TubafScrapingService(
     }
     private val activeJob = AtomicReference<Future<*>?>(null)
     private val jobLock = Any()
+
     @Volatile private var cancellationMessage: String? = null
     private val txTemplate = TransactionTemplate(transactionManager)
-    private val semesterTimer: Timer = Timer.builder("scraping.semester.duration").description("Dauer kompletter Semester-Scrapes").register(meterRegistry)
-    private val programTimer: Timer = Timer.builder("scraping.program.duration").description("Dauer einzelner Studiengang-Scrapes").register(meterRegistry)
-    private val rowPersistTimer: Timer = Timer.builder("scraping.row.persist.duration").description("Persist-Dauer pro Zeile").register(meterRegistry)
+    private val semesterTimer: Timer = Timer.builder(
+        "scraping.semester.duration",
+    ).description("Dauer kompletter Semester-Scrapes").register(meterRegistry)
+    private val programTimer: Timer = Timer.builder(
+        "scraping.program.duration",
+    ).description("Dauer einzelner Studiengang-Scrapes").register(meterRegistry)
+    private val rowPersistTimer: Timer = Timer.builder(
+        "scraping.row.persist.duration",
+    ).description("Persist-Dauer pro Zeile").register(meterRegistry)
     private val errorCounter = meterRegistry.counter("scraping.errors.total")
 
     // ---------------- Parallel Scraping (Variante B) ----------------
@@ -91,8 +97,7 @@ open class TubafScrapingService(
         val inUse: AtomicInteger = AtomicInteger(0)
     }
 
-    private fun createSessionPool(size: Int): List<SessionWrapper> =
-        (1..size).map { SessionWrapper(TubafScraperSession()) }
+    private fun createSessionPool(size: Int): List<SessionWrapper> = (1..size).map { SessionWrapper(TubafScraperSession()) }
 
     private fun acquireSession(pool: List<SessionWrapper>): SessionWrapper {
         while (true) {
@@ -109,25 +114,20 @@ open class TubafScrapingService(
         wrapper.inUse.set(0)
     }
 
-    private fun parallelScrapePrograms(
-        semester: Semester,
-        scrapingRunId: Long,
-        programs: List<StudyProgramOption>,
-        stats: ScrapeStats,
-    ) {
+    private fun parallelScrapePrograms(semester: Semester, scrapingRunId: Long, programs: List<StudyProgramOption>, stats: ScrapeStats) {
         if (programs.isEmpty()) return
 
         val maxWorkers = scrapingConfiguration.parallelMaxWorkers.coerceAtLeast(1)
         val poolSize = scrapingConfiguration.parallelSessionPoolSize.coerceAtLeast(1).coerceAtMost(maxWorkers)
-    val interDelay = scrapingConfiguration.parallelInterTaskDelay
+        val interDelay = scrapingConfiguration.parallelInterTaskDelay
 
-    progressTracker.log("INFO", "⚙️ Parallel: workers=" + maxWorkers + ", sessions=" + poolSize)
+        progressTracker.log("INFO", "⚙️ Parallel: workers=" + maxWorkers + ", sessions=" + poolSize)
         logger.info("Starte paralleles Scraping: {} Programme, {} Worker, {} Sessions", programs.size, maxWorkers, poolSize)
 
         val sessionPool = createSessionPool(poolSize)
         // Wähle ein Referenzsemester in jeder Session (Semester wurde außerhalb ausgewählt)
         // => Wir müssen Semester pro Session setzen: erste Session hat vermutlich bereits Auswahl – wir führen redundante Auswahl aus
-    sessionPool.forEach { wrapper ->
+        sessionPool.forEach { wrapper ->
             try {
                 wrapper.session.fetchSemesterOptions().find { matchesSemesterOption(it, semester) }?.let { so ->
                     wrapper.session.selectSemester(so)
@@ -145,40 +145,42 @@ open class TubafScrapingService(
         val errors = ConcurrentLinkedQueue<Throwable>()
 
         programs.map {
-            workerExecutor.submit(Callable {
-                ensureNotCancelled()
-                val sessionWrapper = acquireSession(sessionPool)
-                val program = it
-                try {
-                    val programStats = scrapeStudyProgram(sessionWrapper.session, semester, scrapingRunId, program)
-                    val msg = buildProgramResultMessage(semester, program, programStats)
-                    logger.info(msg)
-                    synchronized(stats) {
-                        stats.totalEntries += programStats.totalEntries
-                        stats.newEntries += programStats.newEntries
-                        stats.updatedEntries += programStats.updatedEntries
-                        stats.studyProgramsProcessed += programStats.studyProgramsProcessed
+            workerExecutor.submit(
+                Callable {
+                    ensureNotCancelled()
+                    val sessionWrapper = acquireSession(sessionPool)
+                    val program = it
+                    try {
+                        val programStats = scrapeStudyProgram(sessionWrapper.session, semester, scrapingRunId, program)
+                        val msg = buildProgramResultMessage(semester, program, programStats)
+                        logger.info(msg)
+                        synchronized(stats) {
+                            stats.totalEntries += programStats.totalEntries
+                            stats.newEntries += programStats.newEntries
+                            stats.updatedEntries += programStats.updatedEntries
+                            stats.studyProgramsProcessed += programStats.studyProgramsProcessed
+                        }
+                        programStats
+                    } catch (t: Throwable) {
+                        errors.add(t)
+                        progressTracker.log("ERROR", "Fehler bei " + program.code + ": " + t.message)
+                        throw t
+                    } finally {
+                        releaseSession(sessionWrapper)
+                        val done = completed.incrementAndGet()
+                        val updateMsg = program.code + " abgeschlossen (" + done + "/" + programs.size + ")"
+                        progressTracker.update(
+                            task = "Parallel " + semester.shortName,
+                            processed = done,
+                            total = programs.size,
+                            message = updateMsg,
+                        )
+                        if (interDelay > 0) {
+                            Thread.sleep(interDelay)
+                        }
                     }
-                    programStats
-                } catch (t: Throwable) {
-                    errors.add(t)
-                    progressTracker.log("ERROR", "Fehler bei " + program.code + ": " + t.message)
-                    throw t
-                } finally {
-                    releaseSession(sessionWrapper)
-                    val done = completed.incrementAndGet()
-                    val updateMsg = program.code + " abgeschlossen (" + done + "/" + programs.size + ")"
-                    progressTracker.update(
-                        task = "Parallel " + semester.shortName,
-                        processed = done,
-                        total = programs.size,
-                        message = updateMsg
-                    )
-                    if (interDelay > 0) {
-                        Thread.sleep(interDelay)
-                    }
-                }
-            })
+                },
+            )
         }
 
         workerExecutor.shutdown()
@@ -203,10 +205,8 @@ open class TubafScrapingService(
         return current != null && !current.isDone && !current.isCancelled
     }
 
-    fun startDiscoveryJob(): Boolean {
-        return submitJob("Starte Discovery-Scraping") {
-            discoverAndScrapeAvailableSemesters()
-        }
+    fun startDiscoveryJob(): Boolean = submitJob("Starte Discovery-Scraping") {
+        discoverAndScrapeAvailableSemesters()
     }
 
     fun startRemoteScrapingJob(semesterIdentifiers: List<String>): Boolean {
@@ -239,7 +239,7 @@ open class TubafScrapingService(
         progressTracker.start(
             totalCount = semesterOptions.size,
             task = "Discovery",
-            message = "Starte Discovery für ${semesterOptions.size} Semester"
+            message = "Starte Discovery für ${semesterOptions.size} Semester",
         )
 
         if (semesterOptions.isEmpty()) {
@@ -252,7 +252,7 @@ open class TubafScrapingService(
         // SubTasks initialisieren (ein SubTask pro Semesteroption)
         progressTracker.initSubTasks(
             semesterOptions.mapIndexed { idx, opt -> "sem-$idx" },
-            semesterOptions.map { it.displayName }
+            semesterOptions.map { it.displayName },
         )
         try {
             for ((index, option) in semesterOptions.withIndex()) {
@@ -284,7 +284,7 @@ open class TubafScrapingService(
                         "${semesterResult.totalEntries} Einträge (" +
                             "neu ${semesterResult.newEntries}, " +
                             "aktualisiert ${semesterResult.updatedEntries})"
-                        )
+                        ),
                 )
                 progressTracker.completeSubTask(subId)
             }
@@ -307,7 +307,7 @@ open class TubafScrapingService(
         return options.map { option ->
             RemoteSemesterDescriptor(
                 displayName = option.displayName,
-                shortName = buildShortName(option.displayName)
+                shortName = buildShortName(option.displayName),
             )
         }
     }
@@ -349,14 +349,14 @@ open class TubafScrapingService(
         progressTracker.start(
             totalCount = matchedOptions.size,
             task = "Scraping ausgewählter Semester",
-            message = "Starte Scraping für ${matchedOptions.size} Semester"
+            message = "Starte Scraping für ${matchedOptions.size} Semester",
         )
 
         val results = mutableListOf<ScrapingResult>()
         val ordered = matchedOptions.values.toList()
         progressTracker.initSubTasks(
             ordered.mapIndexed { idx, opt -> "sem-$idx" },
-            ordered.map { it.displayName }
+            ordered.map { it.displayName },
         )
         try {
             ordered.forEachIndexed { index, option ->
@@ -374,7 +374,7 @@ open class TubafScrapingService(
                 progressTracker.updateSubTask(
                     id = subId,
                     processed = 100,
-                    message = "${result.totalEntries} Einträge (neu ${result.newEntries}, aktualisiert ${result.updatedEntries})"
+                    message = "${result.totalEntries} Einträge (neu ${result.newEntries}, aktualisiert ${result.updatedEntries})",
                 )
                 progressTracker.completeSubTask(subId)
             }
@@ -404,53 +404,60 @@ open class TubafScrapingService(
 
         session.selectSemester(semesterOption)
         val result = scrapeSemesterDataWithSession(session, semester, trackProgress = true)
-        progressTracker.updateSubTask("sem-0", processed = 100, message = "${result.totalEntries} Einträge (neu ${result.newEntries}, aktualisiert ${result.updatedEntries})")
+        progressTracker.updateSubTask(
+            "sem-0",
+            processed = 100,
+            message = "${result.totalEntries} Einträge (neu ${result.newEntries}, aktualisiert ${result.updatedEntries})",
+        )
         progressTracker.completeSubTask("sem-0")
         return result
     }
 
-    private fun scrapeSemesterDataWithSession(
-        session: TubafScraperSession,
-        semester: Semester,
-        trackProgress: Boolean,
-    ): ScrapingResult {
+    private fun scrapeSemesterDataWithSession(session: TubafScraperSession, semester: Semester, trackProgress: Boolean): ScrapingResult {
         val scrapingRun = changeTrackingService.startScrapingRun(semester.id!!, baseUrl)
         val stats = ScrapeStats()
         return try {
             // Messe komplette Semester-Scrape Dauer (ohne Overload-Ambiguität)
             val semesterSample = Timer.start(meterRegistry)
             try {
-            val programs = session.fetchStudyPrograms()
-            logger.info("Gefundene Studiengänge für {}: {}", semester.name, programs.size)
-            progressTracker.log("INFO", "📚 ${programs.size} Studiengänge gefunden für ${semester.name}")
+                val programs = session.fetchStudyPrograms()
+                logger.info("Gefundene Studiengänge für {}: {}", semester.name, programs.size)
+                progressTracker.log("INFO", "📚 ${programs.size} Studiengänge gefunden für ${semester.name}")
 
-            if (trackProgress) {
-                progressTracker.start(
-                    totalCount = programs.size,
-                    task = if (scrapingConfiguration.parallelEnabled) ("Parallel Scraping " + semester.shortName) else ("Scraping " + semester.shortName),
-                    message = "Starte ${if (scrapingConfiguration.parallelEnabled) "paralleles " else ""}Scraping für ${semester.name}"
-                )
-            }
-
-            if (scrapingConfiguration.parallelEnabled) {
-                parallelScrapePrograms(semester, scrapingRun.id!!, programs, stats)
-            } else {
-                programs.forEachIndexed { index, program ->
-                    ensureNotCancelled()
-                    logger.info(
-                        "   [{} / {}] Verarbeite Studiengang {} ({})",
-                        index + 1,
-                        programs.size,
-                        program.code,
-                        program.displayName,
+                if (trackProgress) {
+                    progressTracker.start(
+                        totalCount = programs.size,
+                        task = if (scrapingConfiguration.parallelEnabled) {
+                            ("Parallel Scraping " + semester.shortName)
+                        } else {
+                            (
+                                "Scraping " +
+                                    semester.shortName
+                                )
+                        },
+                        message = "Starte ${if (scrapingConfiguration.parallelEnabled) "paralleles " else ""}Scraping für ${semester.name}",
                     )
+                }
+
+                if (scrapingConfiguration.parallelEnabled) {
+                    parallelScrapePrograms(semester, scrapingRun.id!!, programs, stats)
+                } else {
+                    programs.forEachIndexed { index, program ->
+                        ensureNotCancelled()
+                        logger.info(
+                            "   [{} / {}] Verarbeite Studiengang {} ({})",
+                            index + 1,
+                            programs.size,
+                            program.code,
+                            program.displayName,
+                        )
                         val programStats = programTimer.recordCallable {
                             scrapeStudyProgram(session, semester, scrapingRun.id!!, program)
                         } ?: ScrapeStats()
-                    stats.totalEntries += programStats.totalEntries
-                    stats.newEntries += programStats.newEntries
-                    stats.updatedEntries += programStats.updatedEntries
-                    stats.studyProgramsProcessed += programStats.studyProgramsProcessed
+                        stats.totalEntries += programStats.totalEntries
+                        stats.newEntries += programStats.newEntries
+                        stats.updatedEntries += programStats.updatedEntries
+                        stats.studyProgramsProcessed += programStats.studyProgramsProcessed
 
                         val msg = buildProgramResultMessage(semester, program, programStats)
                         logger.info(msg)
@@ -459,25 +466,25 @@ open class TubafScrapingService(
                                 task = semester.shortName + ": " + program.code,
                                 processed = index + 1,
                                 total = programs.size,
-                                message = msg
+                                message = msg,
                             )
                         }
+                    }
                 }
-            }
 
-            changeTrackingService.completeScrapingRun(
-                scrapingRun.id!!,
-                stats.totalEntries,
-                stats.newEntries,
-                stats.updatedEntries,
-            )
+                changeTrackingService.completeScrapingRun(
+                    scrapingRun.id!!,
+                    stats.totalEntries,
+                    stats.newEntries,
+                    stats.updatedEntries,
+                )
 
-            logger.info(
-                "Scraping erfolgreich abgeschlossen – Kurse: {}, neu: {}, aktualisiert: {}",
-                stats.totalEntries,
-                stats.newEntries,
-                stats.updatedEntries,
-            )
+                logger.info(
+                    "Scraping erfolgreich abgeschlossen – Kurse: {}, neu: {}, aktualisiert: {}",
+                    stats.totalEntries,
+                    stats.newEntries,
+                    stats.updatedEntries,
+                )
 
                 if (trackProgress) {
                     progressTracker.finish("Scraping ${semester.name} abgeschlossen")
@@ -544,27 +551,17 @@ open class TubafScrapingService(
         return stats
     }
 
-    private fun buildProgramResultMessage(
-        semester: Semester,
-        program: StudyProgramOption,
-        stats: ScrapeStats,
-        disabled: Int = 0
-    ): String {
+    private fun buildProgramResultMessage(semester: Semester, program: StudyProgramOption, stats: ScrapeStats, disabled: Int = 0): String {
         val semShort = semester.shortName
         return (
-            "${semShort}:${program.code}: ${stats.totalEntries} Einträge (" +
+            "$semShort:${program.code}: ${stats.totalEntries} Einträge (" +
                 "neu ${stats.newEntries}, " +
                 "aktualisiert ${stats.updatedEntries}, " +
-                "deaktiviert ${disabled})"
+                "deaktiviert $disabled)"
             )
     }
 
-    private fun persistRows(
-        rows: List<ScrapedRow>,
-        semester: Semester,
-        scrapingRunId: Long,
-        stats: ScrapeStats,
-    ) {
+    private fun persistRows(rows: List<ScrapedRow>, semester: Semester, scrapingRunId: Long, stats: ScrapeStats) {
         for (row in rows) {
             val dayOfWeek = parseDayOfWeek(row.day)
             val timeRange = parseTimeRange(row.time)
@@ -579,86 +576,88 @@ open class TubafScrapingService(
             }
 
             // Kapsel DB-Arbeit je Zeile in eigene Transaktion um lange Locks zu vermeiden
-            rowPersistTimer.record(Runnable {
-                txTemplate.execute {
-                val courseType = getOrCreateCourseType(row.courseType, scrapingRunId)
-                val lecturer = getOrCreateLecturer(row.lecturer, scrapingRunId)
-                val room = getOrCreateRoom(row.room, scrapingRunId)
-                val course = getOrCreateCourse(row.courseTitle, semester, lecturer, courseType, scrapingRunId)
-                attachCourseToStudyProgram(course, row.studyProgram, row.fachSemester)
+            rowPersistTimer.record(
+                Runnable {
+                    txTemplate.execute {
+                        val courseType = getOrCreateCourseType(row.courseType, scrapingRunId)
+                        val lecturer = getOrCreateLecturer(row.lecturer, scrapingRunId)
+                        val room = getOrCreateRoom(row.room, scrapingRunId)
+                        val course = getOrCreateCourse(row.courseTitle, semester, lecturer, courseType, scrapingRunId)
+                        attachCourseToStudyProgram(course, row.studyProgram, row.fachSemester)
 
-                // Lade Course mit scheduleEntries, um LazyInitializationException zu vermeiden
-                val courseWithEntries = courseRepository.findByIdWithScheduleEntries(course.id!!) ?: course
-            
-                val existingEntry =
-                    courseWithEntries.scheduleEntries.firstOrNull { se ->
-                        se.dayOfWeek == dayOfWeek &&
-                            se.startTime == timeRange.first &&
-                            se.endTime == timeRange.second &&
-                            se.room.code.equals(room.code, ignoreCase = true)
-                    }
+                        // Lade Course mit scheduleEntries, um LazyInitializationException zu vermeiden
+                        val courseWithEntries = courseRepository.findByIdWithScheduleEntries(course.id!!) ?: course
 
-                val noteParts = mutableListOf<String>()
-                if (row.category.isNotBlank()) noteParts += row.category
-                if (row.group.isNotBlank()) noteParts += row.group
-                if (row.fachSemester.isNotBlank()) noteParts += row.fachSemester
-                if (row.infoId.isNotBlank()) noteParts += "Info ${row.infoId}"
-                val notesText = noteParts.joinToString(" | ")
+                        val existingEntry =
+                            courseWithEntries.scheduleEntries.firstOrNull { se ->
+                                se.dayOfWeek == dayOfWeek &&
+                                    se.startTime == timeRange.first &&
+                                    se.endTime == timeRange.second &&
+                                    se.room.code.equals(room.code, ignoreCase = true)
+                            }
 
-                if (existingEntry != null) {
-                    var changed = false
-                    if (existingEntry.weekPattern != row.weekPattern) {
-                        changeTrackingService.logEntityUpdated(
-                            scrapingRunId,
-                            "ScheduleEntry",
-                            existingEntry.id!!,
-                            "weekPattern",
-                            existingEntry.weekPattern,
-                            row.weekPattern,
-                        )
-                        existingEntry.weekPattern = row.weekPattern
-                        changed = true
-                    }
+                        val noteParts = mutableListOf<String>()
+                        if (row.category.isNotBlank()) noteParts += row.category
+                        if (row.group.isNotBlank()) noteParts += row.group
+                        if (row.fachSemester.isNotBlank()) noteParts += row.fachSemester
+                        if (row.infoId.isNotBlank()) noteParts += "Info ${row.infoId}"
+                        val notesText = noteParts.joinToString(" | ")
 
-                    if (notesText.isNotBlank() && existingEntry.notes != notesText) {
-                        changeTrackingService.logEntityUpdated(
-                            scrapingRunId,
-                            "ScheduleEntry",
-                            existingEntry.id!!,
-                            "notes",
-                            existingEntry.notes,
-                            notesText,
-                        )
-                        existingEntry.notes = notesText
-                        changed = true
-                    }
+                        if (existingEntry != null) {
+                            var changed = false
+                            if (existingEntry.weekPattern != row.weekPattern) {
+                                changeTrackingService.logEntityUpdated(
+                                    scrapingRunId,
+                                    "ScheduleEntry",
+                                    existingEntry.id!!,
+                                    "weekPattern",
+                                    existingEntry.weekPattern,
+                                    row.weekPattern,
+                                )
+                                existingEntry.weekPattern = row.weekPattern
+                                changed = true
+                            }
 
-                    if (changed) {
-                        scheduleEntryRepository.save(existingEntry)
-                        stats.updatedEntries += 1
-                    }
-                } else {
-                    val newEntry =
-                        ScheduleEntry(
-                            course = course,
-                            room = room,
-                            dayOfWeek = dayOfWeek,
-                            startTime = timeRange.first,
-                            endTime = timeRange.second,
-                        ).apply {
-                            weekPattern = row.weekPattern.ifBlank { null }
-                            notes = notesText.ifBlank { null }
+                            if (notesText.isNotBlank() && existingEntry.notes != notesText) {
+                                changeTrackingService.logEntityUpdated(
+                                    scrapingRunId,
+                                    "ScheduleEntry",
+                                    existingEntry.id!!,
+                                    "notes",
+                                    existingEntry.notes,
+                                    notesText,
+                                )
+                                existingEntry.notes = notesText
+                                changed = true
+                            }
+
+                            if (changed) {
+                                scheduleEntryRepository.save(existingEntry)
+                                stats.updatedEntries += 1
+                            }
+                        } else {
+                            val newEntry =
+                                ScheduleEntry(
+                                    course = course,
+                                    room = room,
+                                    dayOfWeek = dayOfWeek,
+                                    startTime = timeRange.first,
+                                    endTime = timeRange.second,
+                                ).apply {
+                                    weekPattern = row.weekPattern.ifBlank { null }
+                                    notes = notesText.ifBlank { null }
+                                }
+
+                            val saved = scheduleEntryRepository.save(newEntry)
+                            courseWithEntries.scheduleEntries.add(saved)
+                            changeTrackingService.logEntityCreated(scrapingRunId, "ScheduleEntry", saved.id!!)
+                            stats.newEntries += 1
                         }
 
-                    val saved = scheduleEntryRepository.save(newEntry)
-                    courseWithEntries.scheduleEntries.add(saved)
-                    changeTrackingService.logEntityCreated(scrapingRunId, "ScheduleEntry", saved.id!!)
-                    stats.newEntries += 1
-                }
-
-                stats.totalEntries += 1
-                }
-            })
+                        stats.totalEntries += 1
+                    }
+                },
+            )
         }
     }
 
@@ -675,15 +674,9 @@ open class TubafScrapingService(
         }
     }
 
-    private fun parseFachSemesterNumber(value: String): Int? {
-        return value.substringBefore('.').toIntOrNull()
-    }
+    private fun parseFachSemesterNumber(value: String): Int? = value.substringBefore('.').toIntOrNull()
 
-    private fun parseScheduleRows(
-        document: Document,
-        program: StudyProgramOption,
-        fachSemester: String,
-    ): List<ScrapedRow> {
+    private fun parseScheduleRows(document: Document, program: StudyProgramOption, fachSemester: String): List<ScrapedRow> {
         val scheduleTable =
             document.select("table")
                 .firstOrNull { table ->
@@ -745,8 +738,13 @@ open class TubafScrapingService(
             val infoId = extractInfoId(cells[7])
 
             if (courseTitle.isBlank()) {
-                logger.trace("⏭️  Überspringe Zeile ohne Titel: {} Zellen, Type={}, Dozent={}, Tag={}", 
-                    cells.size, courseType, lecturer, day)
+                logger.trace(
+                    "⏭️  Überspringe Zeile ohne Titel: {} Zellen, Type={}, Dozent={}, Tag={}",
+                    cells.size,
+                    courseType,
+                    lecturer,
+                    day,
+                )
                 skippedRows++
                 continue
             }
@@ -948,13 +946,11 @@ open class TubafScrapingService(
         return false
     }
 
-    private fun normalize(value: String): String {
-        return value.lowercase(Locale.GERMAN)
-            .replace(" ", "")
-            .replace("-", "")
-            .replace("/", "")
-            .replace("_", "")
-    }
+    private fun normalize(value: String): String = value.lowercase(Locale.GERMAN)
+        .replace(" ", "")
+        .replace("-", "")
+        .replace("/", "")
+        .replace("_", "")
 
     private fun buildPossibleShortNames(displayName: String): Set<String> {
         val normalized = displayName.lowercase(Locale.GERMAN)
@@ -990,10 +986,10 @@ open class TubafScrapingService(
         return variants.map { it.replace("/", "").replace("-", "") }.toSet()
     }
 
-    private fun getOrCreateSemester(option: SemesterOption): Semester {
-        return semesterService.getAllSemesters().firstOrNull { matchesSemesterOption(option, it) }
-            ?: createSemesterFromOption(option)
+    private fun getOrCreateSemester(option: SemesterOption): Semester = semesterService.getAllSemesters().firstOrNull {
+        matchesSemesterOption(option, it)
     }
+        ?: createSemesterFromOption(option)
 
     private fun createSemesterFromOption(option: SemesterOption): Semester {
         val (start, end) = mapSemesterDates(option.displayName)
@@ -1107,23 +1103,23 @@ open class TubafScrapingService(
         fun selectSemester(option: SemesterOption) {
             logger.info("🔄 Wechsle zu Semester: {}", option.displayName)
             progressTracker.log("INFO", "🔄 Wechsle zu: ${option.displayName}")
-            
+
             // Log Cookies vor dem Request
             val cookiesBefore = cookieManager.cookieStore.cookies.size
             logger.info("🍪 Cookies vor selectSemester: {}", cookiesBefore)
-            
+
             val formData = mapOf(
                 "sem_wahl" to option.displayName,
                 "wechsel" to "4",
                 "senden" to "Auswählen",
             )
             val response = request("POST", "index.html", formData, referer = url("index.html"))
-            
+
             // Log Cookies nach dem Request
             val cookiesAfter = cookieManager.cookieStore.cookies.size
             logger.info("🍪 Cookies nach selectSemester: {}", cookiesAfter)
             progressTracker.log("INFO", "🍪 Cookies: $cookiesAfter")
-            
+
             // Prüfe, welches Semester jetzt aktiv ist
             val activeOption = response.selectFirst("select[name=sem_wahl] option[selected]")
             val activeSemester = activeOption?.text()?.trim() ?: "unbekannt"
@@ -1136,22 +1132,22 @@ open class TubafScrapingService(
             val cookiesBefore = cookieManager.cookieStore.cookies.size
             logger.info("🍪 Cookies vor fetchStudyPrograms: {}", cookiesBefore)
             progressTracker.log("INFO", "🍪 Cookies vor verz.html: $cookiesBefore")
-            
+
             val document = request("GET", "verz.html", referer = url("index.html"))
-            
+
             // Prüfe das aktive Semester auf verz.html
             val activeOption = document.selectFirst("select[name=sem_wahl] option[selected]")
             val activeSemester = activeOption?.text()?.trim() ?: "unbekannt"
             logger.info("📅 Semester auf verz.html: {}", activeSemester)
             progressTracker.log("INFO", "📅 Semester: $activeSemester")
-            
+
             val tableCount = document.select("table").size
             logger.info("🔎 fetchStudyPrograms: Lade verz.html, Tabellen gefunden: {}", tableCount)
             progressTracker.log("INFO", "🔎 verz.html geladen: $tableCount Tabellen gefunden")
-            
+
             // Die Studiengänge-Tabelle ist die, die Links zu stgvrz.html enthält
             val table = document.select("table").firstOrNull { it.select("a[href^=stgvrz.html]").isNotEmpty() }
-            
+
             if (table == null) {
                 logger.warn("⚠️  Keine Tabelle mit stgvrz.html Links gefunden!")
                 progressTracker.log("WARN", "⚠️  Keine passende Tabelle gefunden!")
@@ -1167,10 +1163,10 @@ open class TubafScrapingService(
 
             logger.info("✅ Tabelle gefunden! Text: {}", table.text().take(200))
             progressTracker.log("INFO", "✅ Tabelle gefunden: ${table.text().take(100)}")
-            
+
             val programs = mutableListOf<StudyProgramOption>()
             var currentFaculty = ""
-            
+
             val rowCount = table.select("tr").size
             logger.info("📊 Zeilen in Tabelle: {}", rowCount)
             progressTracker.log("INFO", "📊 $rowCount Zeilen in Tabelle")
@@ -1187,7 +1183,7 @@ open class TubafScrapingService(
                     logger.debug("⏭️  Überspringe Zeile ohne stgvrz.html Link: {}", row.text().take(50))
                     continue
                 }
-                
+
                 val href = link.attr("href")
                 val codeCell = row.selectFirst("td")
                 val code = codeCell?.text()?.trim().orEmpty()
@@ -1206,16 +1202,14 @@ open class TubafScrapingService(
                     )
                 logger.debug("➕ Studiengang: {} ({})", displayName, code)
             }
-            
+
             logger.info("✨ Insgesamt {} Studiengänge gefunden", programs.size)
             progressTracker.log("INFO", "✨ ${programs.size} Studiengänge gefunden")
 
             return programs
         }
 
-        fun openProgram(program: StudyProgramOption): Document {
-            return request("GET", program.href, referer = url("verz.html"))
-        }
+        fun openProgram(program: StudyProgramOption): Document = request("GET", program.href, referer = url("verz.html"))
 
         fun openProgramSemester(program: StudyProgramOption, fachSemester: String): Document {
             val formData = mapOf(
@@ -1227,12 +1221,7 @@ open class TubafScrapingService(
             return request("POST", "stgvrz.html", formData, referer = url("stgvrz.html?stdg=${program.code}"))
         }
 
-        private fun request(
-            method: String,
-            path: String,
-            formData: Map<String, String>? = null,
-            referer: String? = null,
-        ): Document {
+        private fun request(method: String, path: String, formData: Map<String, String>? = null, referer: String? = null): Document {
             val targetUrl = url(path)
             val builder =
                 Request.Builder()
@@ -1296,12 +1285,7 @@ open class TubafScrapingService(
 
     private data class FachSemesterOption(val value: String, val isPostRequired: Boolean)
 
-    private data class StudyProgramOption(
-        val code: String,
-        val displayName: String,
-        val faculty: String,
-        val href: String,
-    ) {
+    private data class StudyProgramOption(val code: String, val displayName: String, val faculty: String, val href: String) {
         val defaultFachSemester: String = "1.Semester"
     }
 
@@ -1326,28 +1310,18 @@ open class TubafScrapingService(
         var updatedEntries: Int = 0,
         var studyProgramsProcessed: Int = 0,
     ) {
-        fun toResult(): ScrapingResult {
-            return ScrapingResult(
-                totalEntries = totalEntries,
-                newEntries = newEntries,
-                updatedEntries = updatedEntries,
-                studyProgramsProcessed = studyProgramsProcessed,
-            )
-        }
+        fun toResult(): ScrapingResult = ScrapingResult(
+            totalEntries = totalEntries,
+            newEntries = newEntries,
+            updatedEntries = updatedEntries,
+            studyProgramsProcessed = studyProgramsProcessed,
+        )
     }
 }
 
-data class ScrapingResult(
-    val totalEntries: Int,
-    val newEntries: Int,
-    val updatedEntries: Int,
-    val studyProgramsProcessed: Int,
-)
+data class ScrapingResult(val totalEntries: Int, val newEntries: Int, val updatedEntries: Int, val studyProgramsProcessed: Int)
 
-data class RemoteSemesterDescriptor(
-    val displayName: String,
-    val shortName: String,
-)
+data class RemoteSemesterDescriptor(val displayName: String, val shortName: String)
 
 data class ScrapingProgressSnapshot(
     val status: ScrapingStatus = ScrapingStatus.IDLE,
@@ -1357,21 +1331,17 @@ data class ScrapingProgressSnapshot(
     val progress: Int = 0,
     val message: String? = null,
     val logs: List<ScrapingLogEntry> = emptyList(),
-    val subTasks: List<ScrapingSubTask> = emptyList()
+    val subTasks: List<ScrapingSubTask> = emptyList(),
 )
 
-data class ScrapingLogEntry(
-    val level: String,
-    val message: String,
-    val timestamp: Instant = Instant.now()
-)
+data class ScrapingLogEntry(val level: String, val message: String, val timestamp: Instant = Instant.now())
 
 enum class ScrapingStatus {
     IDLE,
     RUNNING,
     PAUSED,
     COMPLETED,
-    FAILED
+    FAILED,
 }
 
 data class ScrapingSubTask(
@@ -1382,7 +1352,7 @@ data class ScrapingSubTask(
     var total: Int = 0,
     var progress: Int = 0,
     var message: String? = null,
-    var startedAt: Instant? = null
+    var startedAt: Instant? = null,
 )
 
 private class ScrapingProgressTracker {
@@ -1404,7 +1374,7 @@ private class ScrapingProgressTracker {
                 totalCount = sanitizedTotal,
                 progress = computeProgress(0, sanitizedTotal),
                 message = message,
-                logs = appendLog(state.logs, "INFO", message)
+                logs = appendLog(state.logs, "INFO", message),
             )
         }
     }
@@ -1420,7 +1390,7 @@ private class ScrapingProgressTracker {
                 totalCount = newTotal,
                 progress = newProgress,
                 message = message ?: state.message,
-                logs = updatedLogs
+                logs = updatedLogs,
             )
         }
     }
@@ -1429,7 +1399,7 @@ private class ScrapingProgressTracker {
         synchronized(lock) {
             state = state.copy(
                 message = message,
-                logs = appendLog(state.logs, level, message)
+                logs = appendLog(state.logs, level, message),
             )
         }
     }
@@ -1442,7 +1412,7 @@ private class ScrapingProgressTracker {
                 processedCount = state.totalCount,
                 progress = 100,
                 message = message,
-                logs = appendLog(state.logs, "INFO", message)
+                logs = appendLog(state.logs, "INFO", message),
             )
         }
     }
@@ -1452,7 +1422,7 @@ private class ScrapingProgressTracker {
             state = state.copy(
                 status = ScrapingStatus.FAILED,
                 message = message,
-                logs = appendLog(state.logs, "ERROR", message)
+                logs = appendLog(state.logs, "ERROR", message),
             )
         }
     }
@@ -1462,7 +1432,7 @@ private class ScrapingProgressTracker {
             state = state.copy(
                 status = ScrapingStatus.PAUSED,
                 message = message,
-                logs = appendLog(state.logs, "WARN", message)
+                logs = appendLog(state.logs, "WARN", message),
             )
         }
     }
@@ -1478,7 +1448,7 @@ private class ScrapingProgressTracker {
                 totalCount = 0,
                 progress = 0,
                 message = message,
-                logs = logs.takeLast(MAX_LOGS)
+                logs = logs.takeLast(MAX_LOGS),
             )
         }
     }
@@ -1541,11 +1511,17 @@ private class ScrapingProgressTracker {
         val avgProgress = list.map { it.progress }.average().toInt()
         val processedSum = list.sumOf { it.processed }
         val totalSum = list.sumOf { it.total.coerceAtLeast(0) }
-        val overallProgress = if (totalSum > 0) ((processedSum.toDouble() / totalSum.toDouble()) * 100).toInt().coerceIn(0,100) else avgProgress
+        val overallProgress = if (totalSum >
+            0
+        ) {
+            ((processedSum.toDouble() / totalSum.toDouble()) * 100).toInt().coerceIn(0, 100)
+        } else {
+            avgProgress
+        }
         state = state.copy(
             progress = overallProgress,
             processedCount = processedSum,
-            totalCount = totalSum
+            totalCount = totalSum,
         )
     }
 
