@@ -56,8 +56,8 @@ dependencies {
     implementation("org.jsoup:jsoup:1.21.2")
     implementation("com.squareup.okhttp3:okhttp:5.1.0")
     implementation("com.squareup.okhttp3:okhttp-urlconnection:5.1.0")
-    implementation("io.ktor:ktor-client-core:2.3.12")
-    implementation("io.ktor:ktor-client-cio:2.3.12")
+    implementation("io.ktor:ktor-client-core:3.3.0")
+    implementation("io.ktor:ktor-client-cio:3.3.0")
 	
     // API Documentation
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
