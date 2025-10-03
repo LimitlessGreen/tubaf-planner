@@ -1,11 +1,11 @@
 plugins {
-        kotlin("jvm") version "2.0.21"
-        kotlin("plugin.spring") version "2.0.21"
-        id("org.springframework.boot") version "3.5.6"
-        id("io.spring.dependency-management") version "1.1.6"
-        kotlin("plugin.jpa") version "2.0.21"
-        // id("io.gitlab.arturbosch.detekt") version "1.23.4" // Deaktiviert für jetzt
-        id("com.ncorti.ktfmt.gradle") version "0.18.0"
+	kotlin("jvm") version "2.0.21"
+	kotlin("plugin.spring") version "2.0.21"
+	id("org.springframework.boot") version "3.5.6"
+	id("io.spring.dependency-management") version "1.1.6"
+	kotlin("plugin.jpa") version "2.0.21"
+	// id("io.gitlab.arturbosch.detekt") version "1.23.4" // Deaktiviert für jetzt
+	id("com.diffplug.spotless") version "6.25.0"
 }
 
 group = "de.tubaf"
@@ -13,15 +13,11 @@ version = "0.0.1-SNAPSHOT"
 description = "TUBAF Schedule Planning and Management System with Kotlin"
 
 java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
+	toolchain { languageVersion = JavaLanguageVersion.of(21) }
 }
 
 configurations {
-	compileOnly {
-		extendsFrom(configurations.annotationProcessor.get())
-	}
+	compileOnly { extendsFrom(configurations.annotationProcessor.get()) }
 }
 
 repositories {
@@ -88,9 +84,7 @@ dependencies {
 }
 
 kotlin {
-	compilerOptions {
-		freeCompilerArgs.addAll("-Xjsr305=strict")
-	}
+	compilerOptions { freeCompilerArgs.addAll("-Xjsr305=strict") }
 }
 
 allOpen {
@@ -114,6 +108,29 @@ tasks.withType<Test> {
 //	buildUponDefaultConfig = true
 // }
 
+val skipFormat = providers.gradleProperty("skipFormat").orNull == "true"
+
+spotless {
+	if (!skipFormat) {
+		kotlin {
+			target("src/**/*.kt")
+			ktfmt("0.52").kotlinlangStyle()
+		}
+		kotlinGradle {
+			target("*.gradle.kts")
+			ktfmt("0.52").kotlinlangStyle()
+		}
+		format("misc") {
+			target("*.md", ".gitignore")
+			trimTrailingWhitespace()
+			endWithNewline()
+		}
+	} else {
+		logger.lifecycle("Spotless deaktiviert durch -PskipFormat=true")
+	}
+}
+
+tasks.named("compileKotlin") { dependsOn("spotlessApply") }
 ktfmt {
 	kotlinLangStyle()
 }
