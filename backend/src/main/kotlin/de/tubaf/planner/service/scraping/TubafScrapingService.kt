@@ -4,12 +4,14 @@ import de.tubaf.planner.model.Course
 import de.tubaf.planner.model.CourseType
 import de.tubaf.planner.model.Lecturer
 import de.tubaf.planner.model.Room
+import de.tubaf.planner.model.RoomPlanSlot
 import de.tubaf.planner.model.ScheduleEntry
 import de.tubaf.planner.model.Semester
 import de.tubaf.planner.repository.CourseRepository
 import de.tubaf.planner.repository.CourseTypeRepository
 import de.tubaf.planner.repository.LecturerRepository
 import de.tubaf.planner.repository.RoomRepository
+import de.tubaf.planner.repository.RoomPlanSlotRepository
 import de.tubaf.planner.repository.ScheduleEntryRepository
 import de.tubaf.planner.repository.StudyProgramRepository
 import de.tubaf.planner.service.ChangeTrackingService
@@ -23,12 +25,14 @@ import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.URI
 import java.net.URLDecoder
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -54,6 +58,7 @@ open class TubafScrapingService(
     private val courseTypeRepository: CourseTypeRepository,
     private val lecturerRepository: LecturerRepository,
     private val roomRepository: RoomRepository,
+    private val roomPlanSlotRepository: RoomPlanSlotRepository,
     private val scheduleEntryRepository: ScheduleEntryRepository,
     private val studyProgramRepository: StudyProgramRepository,
     @Value("\${tubaf.scraper.base-url:https://evlvz.hrz.tu-freiberg.de/~vover}")
@@ -65,6 +70,7 @@ open class TubafScrapingService(
 ) {
     private val logger = LoggerFactory.getLogger(TubafScrapingService::class.java)
     private val timeFormatter = DateTimeFormatter.ofPattern("H:mm")
+    private val roomPlanDateFormatter = DateTimeFormatter.ofPattern("d.M.yyyy")
     private val progressTracker = ScrapingProgressTracker()
     private val httpProxy: Proxy = detectProxy()
     private val executor =
@@ -321,18 +327,24 @@ open class TubafScrapingService(
                 }
             }
 
+            scrapeRoomPlans(session, semester, scrapingRun.id!!, stats)
+
             changeTrackingService.completeScrapingRun(
                 scrapingRun.id!!,
-                stats.totalEntries,
-                stats.newEntries,
-                stats.updatedEntries,
+                stats.totalEntries + stats.roomPlanEntries,
+                stats.newEntries + stats.roomPlanEntriesNew,
+                stats.updatedEntries + stats.roomPlanEntriesUpdated + stats.roomPlanEntriesDeactivated,
             )
 
             logger.info(
-                "Scraping erfolgreich abgeschlossen – Kurse: {}, neu: {}, aktualisiert: {}",
+                "Scraping erfolgreich abgeschlossen – Kurse: {}, neu: {}, aktualisiert: {}, Raumpläne: {} (Slots neu {}, aktualisiert {}, deaktiviert {})",
                 stats.totalEntries,
                 stats.newEntries,
                 stats.updatedEntries,
+                stats.roomPlansProcessed,
+                stats.roomPlanEntriesNew,
+                stats.roomPlanEntriesUpdated,
+                stats.roomPlanEntriesDeactivated,
             )
 
             if (trackProgress) {
@@ -498,6 +510,366 @@ open class TubafScrapingService(
             }
 
             stats.totalEntries += 1
+        }
+    }
+
+    private fun scrapeRoomPlans(
+        session: TubafScraperSession,
+        semester: Semester,
+        scrapingRunId: Long,
+        stats: ScrapeStats,
+    ) {
+        val options = session.fetchRoomPlanOptions()
+        if (options.isEmpty()) {
+            logger.info("Keine Raumpläne für {} gefunden", semester.name)
+            progressTracker.log("INFO", "🏢 Keine Raumpläne gefunden")
+            return
+        }
+
+        progressTracker.log("INFO", "🏢 ${options.size} Raumpläne gefunden")
+
+        options.forEachIndexed { index, option ->
+            ensureNotCancelled()
+            try {
+                val document = session.fetchRoomPlan(option)
+                val parsed = parseRoomPlan(document, option)
+                val room = getOrCreateRoom(parsed.code, scrapingRunId)
+                if (updateRoomFromPlan(room, parsed, scrapingRunId)) {
+                    stats.roomsUpdatedFromPlans += 1
+                }
+
+                val entryStats =
+                    persistRoomPlanEntries(
+                        room,
+                        semester,
+                        scrapingRunId,
+                        parsed.entries
+                    )
+                stats.roomPlansProcessed += 1
+                stats.roomPlanEntries += entryStats.total
+                stats.roomPlanEntriesNew += entryStats.created
+                stats.roomPlanEntriesUpdated += entryStats.updated
+                stats.roomPlanEntriesDeactivated += entryStats.deactivated
+
+                progressTracker.update(
+                    task = "Raumpläne",
+                    processed = index + 1,
+                    total = options.size,
+                    message =
+                        "${parsed.code}: ${entryStats.total} Einträge (neu ${entryStats.created}, aktualisiert ${entryStats.updated}, deaktiviert ${entryStats.deactivated})"
+                )
+            } catch (ex: Exception) {
+                logger.warn("Fehler beim Verarbeiten des Raumplans {}: {}", option.code, ex.message)
+                progressTracker.log(
+                    "WARN",
+                    "⚠️ Raumplan ${option.code} konnte nicht geladen werden: ${ex.message}"
+                )
+            }
+        }
+    }
+
+    private fun parseRoomPlan(document: Document, option: RoomPlanOption): ParsedRoomPlan {
+        val headerSpan =
+            document.selectFirst("span[style*=color:blue]")
+                ?: document.select("span").firstOrNull { it.text().contains("Raum", ignoreCase = true) }
+        val headerText = headerSpan?.text()?.trim().orEmpty()
+
+        val headerRegex =
+            Regex(
+                "Raum\\s+([^\\s]+)\\s+-\\s+([\\d.]+)\\s+Plätze\\s+-\\s+(.*)",
+                RegexOption.IGNORE_CASE
+            )
+        val headerMatch = headerRegex.find(headerText)
+        val code = headerMatch?.groupValues?.getOrNull(1)?.trim().orEmpty().ifBlank { option.code }
+        val capacity =
+            headerMatch?.groupValues?.getOrNull(2)?.replace(".", "")?.toIntOrNull()
+                ?: Regex("(\\d[\\d.]*)").find(headerText)?.groupValues?.getOrNull(1)?.replace(".", "")?.toIntOrNull()
+        val locationDescription = headerMatch?.groupValues?.getOrNull(3)?.trim().orEmpty().ifBlank {
+            headerText.substringAfterLast('-').trim().ifBlank { null }
+        }
+
+        val planDate =
+            document.select("span").mapNotNull { span ->
+                val text = span.text()
+                if (text.contains("Datum:", ignoreCase = true)) {
+                    parsePlanDate(text)
+                } else {
+                    null
+                }
+            }.firstOrNull()
+
+        val scheduleTable = document.selectFirst("table[rules=cols]")
+        if (scheduleTable == null) {
+            logger.debug("Keine Raumplan-Tabelle für {} gefunden", code)
+            return ParsedRoomPlan(code, capacity, locationDescription, planDate, emptyList())
+        }
+
+        val headerRow = scheduleTable.selectFirst("tr:has(th)")
+        val dayHeaders = headerRow?.select("th")?.map { it.text().trim() } ?: emptyList()
+        val dayMapping = dayHeaders.map { parseDayOfWeek(it) }
+
+        val entries = mutableListOf<RoomPlanEntryData>()
+        val dataRows = scheduleTable.select("tr").drop(1)
+        for (row in dataRows) {
+            val cells = row.select("> td")
+            if (cells.isEmpty()) {
+                continue
+            }
+
+            cells.forEachIndexed { index, cell ->
+                val dayOfWeek = dayMapping.getOrNull(index) ?: return@forEachIndexed
+                val blockTables = cell.select("> table")
+                if (blockTables.isEmpty()) {
+                    return@forEachIndexed
+                }
+
+                for (block in blockTables) {
+                    val blockRows = block.select("> tr")
+                    if (blockRows.size < 4) {
+                        continue
+                    }
+
+                    val timeRange = parseTimeRange(blockRows[0].text()) ?: continue
+                    val weekPattern = blockRows.getOrNull(1)?.text()?.trim()?.ifBlank { null }
+                    val courseType = blockRows.getOrNull(2)?.text()?.trim()?.ifBlank { null }
+                    val titleCell = blockRows.getOrNull(3)?.selectFirst("td")
+                    val courseTitle = titleCell?.text()?.trim()?.ifBlank { null } ?: continue
+                    val infoId = titleCell?.let { extractInfoId(it) }?.ifBlank { null }
+                    val lecturer = blockRows.getOrNull(4)?.text()?.trim()?.ifBlank { null }
+
+                    entries +=
+                        RoomPlanEntryData(
+                            dayOfWeek = dayOfWeek,
+                            startTime = timeRange.first,
+                            endTime = timeRange.second,
+                            courseTitle = courseTitle,
+                            courseType = courseType,
+                            lecturer = lecturer,
+                            weekPattern = weekPattern,
+                            infoId = infoId,
+                        )
+                }
+            }
+        }
+
+        return ParsedRoomPlan(code, capacity, locationDescription, planDate, entries)
+    }
+
+    private fun updateRoomFromPlan(
+        room: Room,
+        plan: ParsedRoomPlan,
+        scrapingRunId: Long,
+    ): Boolean {
+        var changed = false
+
+        if (plan.capacity != null && room.capacity != plan.capacity) {
+            changeTrackingService.logEntityUpdated(
+                scrapingRunId,
+                "Room",
+                room.id!!,
+                "capacity",
+                room.capacity?.toString(),
+                plan.capacity.toString()
+            )
+            room.capacity = plan.capacity
+            changed = true
+        }
+
+        if (plan.locationDescription != null && room.locationDescription != plan.locationDescription) {
+            changeTrackingService.logEntityUpdated(
+                scrapingRunId,
+                "Room",
+                room.id!!,
+                "locationDescription",
+                room.locationDescription,
+                plan.locationDescription
+            )
+            room.locationDescription = plan.locationDescription
+            changed = true
+        }
+
+        if (plan.planDate != null && room.planUpdatedAt != plan.planDate) {
+            changeTrackingService.logEntityUpdated(
+                scrapingRunId,
+                "Room",
+                room.id!!,
+                "planUpdatedAt",
+                room.planUpdatedAt?.toString(),
+                plan.planDate.toString()
+            )
+            room.planUpdatedAt = plan.planDate
+            changed = true
+        }
+
+        if (changed) {
+            roomRepository.save(room)
+        }
+
+        return changed
+    }
+
+    private fun persistRoomPlanEntries(
+        room: Room,
+        semester: Semester,
+        scrapingRunId: Long,
+        entries: List<RoomPlanEntryData>,
+    ): RoomPlanEntryPersistStats {
+        if (room.id == null) {
+            return RoomPlanEntryPersistStats(entries.size, 0, 0, 0)
+        }
+
+        val existing = roomPlanSlotRepository.findByRoomIdAndSemesterId(room.id!!, semester.id!!)
+        val existingMap =
+            existing.associateBy { slot ->
+                RoomPlanSlotKey(
+                    slot.dayOfWeek,
+                    slot.startTime,
+                    slot.endTime,
+                    slot.courseTitle.trim().lowercase(Locale.GERMAN)
+                )
+            }
+        val processedKeys = mutableSetOf<RoomPlanSlotKey>()
+
+        var created = 0
+        var updated = 0
+
+        for (entry in entries) {
+            val key =
+                RoomPlanSlotKey(
+                    entry.dayOfWeek,
+                    entry.startTime,
+                    entry.endTime,
+                    entry.courseTitle.trim().lowercase(Locale.GERMAN)
+                )
+            val existingSlot = existingMap[key]
+            if (existingSlot != null) {
+                processedKeys += key
+                var changed = false
+
+                if (!existingSlot.active) {
+                    changeTrackingService.logEntityUpdated(
+                        scrapingRunId,
+                        "RoomPlanSlot",
+                        existingSlot.id!!,
+                        "active",
+                        "false",
+                        "true"
+                    )
+                    existingSlot.active = true
+                    changed = true
+                }
+
+                if (entry.courseType != existingSlot.courseType) {
+                    changeTrackingService.logEntityUpdated(
+                        scrapingRunId,
+                        "RoomPlanSlot",
+                        existingSlot.id!!,
+                        "courseType",
+                        existingSlot.courseType,
+                        entry.courseType
+                    )
+                    existingSlot.courseType = entry.courseType
+                    changed = true
+                }
+
+                if (entry.weekPattern != existingSlot.weekPattern) {
+                    changeTrackingService.logEntityUpdated(
+                        scrapingRunId,
+                        "RoomPlanSlot",
+                        existingSlot.id!!,
+                        "weekPattern",
+                        existingSlot.weekPattern,
+                        entry.weekPattern
+                    )
+                    existingSlot.weekPattern = entry.weekPattern
+                    changed = true
+                }
+
+                if (entry.lecturer != existingSlot.lecturers) {
+                    changeTrackingService.logEntityUpdated(
+                        scrapingRunId,
+                        "RoomPlanSlot",
+                        existingSlot.id!!,
+                        "lecturers",
+                        existingSlot.lecturers,
+                        entry.lecturer
+                    )
+                    existingSlot.lecturers = entry.lecturer
+                    changed = true
+                }
+
+                if (entry.infoId != existingSlot.infoId) {
+                    changeTrackingService.logEntityUpdated(
+                        scrapingRunId,
+                        "RoomPlanSlot",
+                        existingSlot.id!!,
+                        "infoId",
+                        existingSlot.infoId,
+                        entry.infoId
+                    )
+                    existingSlot.infoId = entry.infoId
+                    changed = true
+                }
+
+                if (changed) {
+                    roomPlanSlotRepository.save(existingSlot)
+                    updated += 1
+                }
+            } else {
+                val slot =
+                    RoomPlanSlot(
+                        room = room,
+                        semester = semester,
+                        dayOfWeek = entry.dayOfWeek,
+                        startTime = entry.startTime,
+                        endTime = entry.endTime,
+                        courseTitle = entry.courseTitle,
+                        courseType = entry.courseType,
+                        lecturers = entry.lecturer,
+                        weekPattern = entry.weekPattern,
+                        infoId = entry.infoId,
+                    )
+                val saved = roomPlanSlotRepository.save(slot)
+                changeTrackingService.logEntityCreated(scrapingRunId, "RoomPlanSlot", saved.id!!)
+                created += 1
+                processedKeys += key
+            }
+        }
+
+        var deactivated = 0
+        existing.forEach { slot ->
+            val key =
+                RoomPlanSlotKey(
+                    slot.dayOfWeek,
+                    slot.startTime,
+                    slot.endTime,
+                    slot.courseTitle.trim().lowercase(Locale.GERMAN)
+                )
+            if (key !in processedKeys && slot.active) {
+                slot.active = false
+                roomPlanSlotRepository.save(slot)
+                changeTrackingService.logEntityUpdated(
+                    scrapingRunId,
+                    "RoomPlanSlot",
+                    slot.id!!,
+                    "active",
+                    "true",
+                    "false"
+                )
+                deactivated += 1
+            }
+        }
+
+        return RoomPlanEntryPersistStats(entries.size, created, updated, deactivated)
+    }
+
+    private fun parsePlanDate(value: String): LocalDate? {
+        val match = Regex("(\\d{1,2}\\.\\d{1,2}\\.\\d{4})").find(value)
+        val dateText = match?.groupValues?.getOrNull(1) ?: return null
+        return try {
+            LocalDate.parse(dateText, roomPlanDateFormatter)
+        } catch (ex: DateTimeParseException) {
+            null
         }
     }
 
@@ -1175,6 +1547,27 @@ open class TubafScrapingService(
             return request("POST", "stgvrz.html", formData, referer = url(program.href))
         }
 
+        fun fetchRoomPlanOptions(): List<RoomPlanOption> {
+            val document = request("GET", "plaene.html", referer = url("index.html"))
+            val select = document.selectFirst("select[name=raum]") ?: return emptyList()
+
+            return select.select("option")
+                .mapNotNull { option ->
+                    val value = option.attr("value").ifBlank { option.text() }.trim()
+                    if (value.isBlank()) {
+                        null
+                    } else {
+                        RoomPlanOption(code = value, displayName = option.text().trim().ifBlank { value })
+                    }
+                }
+        }
+
+        fun fetchRoomPlan(option: RoomPlanOption): Document {
+            val encoded = URLEncoder.encode(option.code, StandardCharsets.UTF_8)
+            val path = "druck_html.html?art=raumplan&raum=$encoded"
+            return request("GET", path, referer = url("plaene.html"))
+        }
+
         private fun request(
             method: String,
             path: String,
@@ -1259,6 +1652,11 @@ open class TubafScrapingService(
         val defaultFachSemester: String = "1.Semester"
     }
 
+    protected data class RoomPlanOption(
+        val code: String,
+        val displayName: String,
+    )
+
     private data class ScrapedRow(
         val studyProgram: StudyProgramOption,
         val fachSemester: String,
@@ -1274,18 +1672,64 @@ open class TubafScrapingService(
         val infoId: String,
     )
 
+    private data class ParsedRoomPlan(
+        val code: String,
+        val capacity: Int?,
+        val locationDescription: String?,
+        val planDate: LocalDate?,
+        val entries: List<RoomPlanEntryData>,
+    )
+
+    private data class RoomPlanEntryData(
+        val dayOfWeek: DayOfWeek,
+        val startTime: LocalTime,
+        val endTime: LocalTime,
+        val courseTitle: String,
+        val courseType: String?,
+        val lecturer: String?,
+        val weekPattern: String?,
+        val infoId: String?,
+    )
+
+    private data class RoomPlanEntryPersistStats(
+        val total: Int,
+        val created: Int,
+        val updated: Int,
+        val deactivated: Int,
+    )
+
+    private data class RoomPlanSlotKey(
+        val dayOfWeek: DayOfWeek,
+        val startTime: LocalTime,
+        val endTime: LocalTime,
+        val courseTitleKey: String,
+    )
+
     private data class ScrapeStats(
         var totalEntries: Int = 0,
         var newEntries: Int = 0,
         var updatedEntries: Int = 0,
         var studyProgramsProcessed: Int = 0,
+        var roomPlansProcessed: Int = 0,
+        var roomPlanEntries: Int = 0,
+        var roomPlanEntriesNew: Int = 0,
+        var roomPlanEntriesUpdated: Int = 0,
+        var roomPlanEntriesDeactivated: Int = 0,
+        var roomsUpdatedFromPlans: Int = 0,
     ) {
         fun toResult(): ScrapingResult {
             return ScrapingResult(
-                totalEntries = totalEntries,
-                newEntries = newEntries,
-                updatedEntries = updatedEntries,
+                totalEntries = totalEntries + roomPlanEntries,
+                newEntries = newEntries + roomPlanEntriesNew,
+                updatedEntries =
+                    updatedEntries + roomPlanEntriesUpdated + roomPlanEntriesDeactivated,
                 studyProgramsProcessed = studyProgramsProcessed,
+                roomPlansProcessed = roomPlansProcessed,
+                roomPlanEntries = roomPlanEntries,
+                roomPlanEntriesNew = roomPlanEntriesNew,
+                roomPlanEntriesUpdated = roomPlanEntriesUpdated,
+                roomPlanEntriesDeactivated = roomPlanEntriesDeactivated,
+                roomsUpdatedFromPlans = roomsUpdatedFromPlans,
             )
         }
     }
@@ -1296,6 +1740,12 @@ data class ScrapingResult(
     val newEntries: Int,
     val updatedEntries: Int,
     val studyProgramsProcessed: Int,
+    val roomPlansProcessed: Int,
+    val roomPlanEntries: Int,
+    val roomPlanEntriesNew: Int,
+    val roomPlanEntriesUpdated: Int,
+    val roomPlanEntriesDeactivated: Int,
+    val roomsUpdatedFromPlans: Int,
 )
 
 data class RemoteSemesterDescriptor(

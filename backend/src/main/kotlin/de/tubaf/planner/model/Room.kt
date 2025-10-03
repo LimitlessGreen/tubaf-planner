@@ -3,6 +3,7 @@ package de.tubaf.planner.model
 import jakarta.persistence.*
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import java.time.LocalDate
 
 @Entity
 @Table(name = "rooms")
@@ -24,6 +25,9 @@ class Room(
     @Column(name = "room_type", length = 50)
     var roomType: RoomType? = null,
     @Column(name = "equipment", columnDefinition = "TEXT") var equipment: String? = null,
+    @Column(name = "location_description", length = 255)
+    var locationDescription: String? = null,
+    @Column(name = "plan_updated_at") var planUpdatedAt: LocalDate? = null,
     @Column(name = "active") var active: Boolean = true
 ) : BaseEntity() {
 
