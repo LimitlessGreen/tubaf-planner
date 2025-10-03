@@ -14,8 +14,10 @@ spring:
         format_sql: true
   flyway:
     enabled: true
-    # Basis + vendor-spezifische Migrationen
-    locations: classpath:db/migration,classpath:db/migration_postgresql
+    # Nur vendor-spezifische Migrationen laden um Versionskollisionen (V3 doppelt) zu vermeiden.
+    # Baseline V1 & V2 liegen identisch in db/migration und db/migration_postgresql nicht; deshalb fügen wir beide Pfade hinzu,
+    # schließen aber die generische V3 aus, indem wir sie nach vendor Trennung künftig nicht mehr parallel pflegen.
+    locations: classpath:db/migration_postgresql,classpath:db/migration
     baseline-on-migrate: true
 
 logging:
