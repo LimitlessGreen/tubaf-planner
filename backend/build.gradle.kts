@@ -35,7 +35,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-thymeleaf")
 	
     // WebJars for Frontend Libraries
-    implementation("org.webjars:bootstrap:5.3.2")
+    implementation("org.webjars:bootstrap:5.3.8")
     implementation("org.webjars:jquery:3.7.1")
     implementation("org.webjars:font-awesome:6.4.2")
     implementation("org.webjars.npm:chart.js:4.5.0")
