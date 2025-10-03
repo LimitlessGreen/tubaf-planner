@@ -12,7 +12,7 @@ class SemesterController(
     private val semesterService: SemesterService,
     private val courseService: CourseService,
     private val scheduleService: ScheduleService,
-    private val changeTrackingService: ChangeTrackingService
+    private val changeTrackingService: ChangeTrackingService,
 ) {
 
     @GetMapping

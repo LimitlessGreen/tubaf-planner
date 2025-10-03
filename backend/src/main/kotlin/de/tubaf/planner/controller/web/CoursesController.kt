@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*
 class CoursesController(
     private val courseService: CourseService,
     private val semesterService: SemesterService,
-    private val studyProgramService: StudyProgramService
+    private val studyProgramService: StudyProgramService,
 ) {
 
     @GetMapping
@@ -18,7 +18,7 @@ class CoursesController(
         @RequestParam(required = false) semesterId: Long?,
         @RequestParam(required = false) studyProgramId: Long?,
         @RequestParam(required = false) search: String?,
-        model: Model
+        model: Model,
     ): String {
         val activeSemesters = semesterService.getActiveSemesters()
         val currentSemester =
@@ -31,7 +31,7 @@ class CoursesController(
                 studyProgramId != null ->
                     courseService.getCoursesByStudyProgramAndSemester(
                         studyProgramId,
-                        currentSemester.id!!
+                        currentSemester.id!!,
                     )
                 search != null && search.isNotBlank() ->
                     courseService.searchCourses(search, currentSemester.id!!)

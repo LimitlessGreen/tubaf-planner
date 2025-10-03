@@ -27,7 +27,7 @@ class ScrapingConfiguration {
             "MABA" to StudyProgramMapping("Mathematik", "MASTER"),
             "MAET" to StudyProgramMapping("Elektrotechnik", "MASTER"),
             "MAIN" to StudyProgramMapping("Informatik", "MASTER"),
-            "MAUM" to StudyProgramMapping("Umwelt-Engineering", "MASTER")
+            "MAUM" to StudyProgramMapping("Umwelt-Engineering", "MASTER"),
         )
 
     // Room building mappings
@@ -40,7 +40,7 @@ class ScrapingConfiguration {
             "CHE" to "Chemie",
             "PHY" to "Physik",
             "MAS" to "Maschinenbau",
-            "BAU" to "Bauingenieurwesen"
+            "BAU" to "Bauingenieurwesen",
         )
 
     // Course type mappings
@@ -49,7 +49,7 @@ class ScrapingConfiguration {
             "V" to CourseTypeMapping("Vorlesung", "Lecture"),
             "Ü" to CourseTypeMapping("Übung", "Exercise"),
             "S" to CourseTypeMapping("Seminar", "Seminar"),
-            "P" to CourseTypeMapping("Praktikum", "Lab/Practical")
+            "P" to CourseTypeMapping("Praktikum", "Lab/Practical"),
         )
 }
 

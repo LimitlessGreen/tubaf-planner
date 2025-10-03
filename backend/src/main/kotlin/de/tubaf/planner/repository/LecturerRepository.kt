@@ -11,10 +11,7 @@ interface LecturerRepository : JpaRepository<Lecturer, Long> {
 
     fun findByActive(active: Boolean): List<Lecturer>
 
-    fun findByNameContainingIgnoreCaseAndActive(
-        name: String,
-        active: Boolean = true
-    ): List<Lecturer>
+    fun findByNameContainingIgnoreCaseAndActive(name: String, active: Boolean = true): List<Lecturer>
 
     fun findByDepartmentAndActive(department: String, active: Boolean = true): List<Lecturer>
 
@@ -28,7 +25,7 @@ interface LecturerRepository : JpaRepository<Lecturer, Long> {
              OR LOWER(l.department) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
              OR LOWER(l.title) LIKE LOWER(CONCAT('%', :searchTerm, '%')))
         ORDER BY l.name
-        """
+        """,
     )
     fun searchByNameOrDepartmentOrTitle(@Param("searchTerm") searchTerm: String): List<Lecturer>
 
@@ -39,7 +36,7 @@ interface LecturerRepository : JpaRepository<Lecturer, Long> {
         WHERE c.semester.id = :semesterId 
         AND l.active = true
         ORDER BY l.name
-        """
+        """,
     )
     fun findBySemesterId(@Param("semesterId") semesterId: Long): List<Lecturer>
 
@@ -48,10 +45,7 @@ interface LecturerRepository : JpaRepository<Lecturer, Long> {
         SELECT COUNT(c) FROM Course c 
         WHERE c.lecturer.id = :lecturerId 
         AND c.semester.id = :semesterId
-        """
+        """,
     )
-    fun countCoursesBySemester(
-        @Param("lecturerId") lecturerId: Long,
-        @Param("semesterId") semesterId: Long
-    ): Long
+    fun countCoursesBySemester(@Param("lecturerId") lecturerId: Long, @Param("semesterId") semesterId: Long): Long
 }

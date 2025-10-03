@@ -5,17 +5,14 @@ import de.tubaf.planner.repository.ScrapingRunRepository
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
-import java.time.LocalDateTime
-import java.time.temporal.ChronoUnit
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.stereotype.Service
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 
 @Service
 @ConditionalOnClass(MeterRegistry::class)
-class ScrapingMetricsService(
-    private val meterRegistry: MeterRegistry,
-    private val scrapingRunRepository: ScrapingRunRepository
-) {
+class ScrapingMetricsService(private val meterRegistry: MeterRegistry, private val scrapingRunRepository: ScrapingRunRepository) {
 
     private val scrapingCounter: Counter =
         Counter.builder("tubaf.scraping.runs.total")
@@ -57,7 +54,7 @@ class ScrapingMetricsService(
         val recentRuns =
             scrapingRunRepository.findByStatusesAndStartTimeAfter(
                 listOf(ScrapingStatus.COMPLETED, ScrapingStatus.FAILED),
-                since
+                since,
             )
 
         val successful = recentRuns.count { it.status == ScrapingStatus.COMPLETED }
@@ -76,7 +73,7 @@ class ScrapingMetricsService(
             successfulRuns = successful,
             failedRuns = failed,
             successRate = if (totalRuns > 0) successful.toDouble() / totalRuns else 0.0,
-            averageDurationMs = avgDuration.toLong()
+            averageDurationMs = avgDuration.toLong(),
         )
     }
 }
@@ -87,5 +84,5 @@ data class ScrapingMetrics(
     val successfulRuns: Int,
     val failedRuns: Int,
     val successRate: Double,
-    val averageDurationMs: Long
+    val averageDurationMs: Long,
 )

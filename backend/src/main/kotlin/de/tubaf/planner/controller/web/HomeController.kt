@@ -12,7 +12,7 @@ class HomeController(
     private val semesterService: SemesterService,
     private val courseService: CourseService,
     private val scheduleService: ScheduleService,
-    private val changeTrackingService: ChangeTrackingService
+    private val changeTrackingService: ChangeTrackingService,
 ) {
 
     @GetMapping
@@ -34,12 +34,13 @@ class HomeController(
             model.addAttribute("recentChanges", recentChanges.size)
             model.addAttribute(
                 "lastScrapingRun",
-                changeTrackingService.getLastSuccessfulRun(semesterId)
+                changeTrackingService.getLastSuccessfulRun(semesterId),
             )
         }
 
         return "dashboard"
     }
 
-    @GetMapping("/about") fun about(): String = "about"
+    @GetMapping("/about")
+    fun about(): String = "about"
 }

@@ -20,7 +20,7 @@ class Lecturer(
     @Column(name = "department", length = 100)
     @field:Size(max = 100)
     var department: String? = null,
-    @Column(name = "active") var active: Boolean = true
+    @Column(name = "active") var active: Boolean = true,
 ) : BaseEntity() {
 
     @OneToMany(mappedBy = "lecturer", fetch = FetchType.LAZY)
@@ -29,7 +29,5 @@ class Lecturer(
     val fullName: String
         get() = if (title != null) "$title $name" else name
 
-    override fun toString(): String {
-        return "Lecturer(id=$id, name='$name', title='$title')"
-    }
+    override fun toString(): String = "Lecturer(id=$id, name='$name', title='$title')"
 }

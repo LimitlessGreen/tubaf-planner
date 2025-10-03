@@ -15,7 +15,7 @@ class DataController(
     private val changeTrackingService: ChangeTrackingService,
     private val tubafScrapingService: TubafScrapingService,
     private val studyProgramService: StudyProgramService,
-    private val roomService: RoomService
+    private val roomService: RoomService,
 ) {
 
     @GetMapping
@@ -35,10 +35,7 @@ class DataController(
     }
 
     @GetMapping("/scraping")
-    fun scrapingManagement(
-        @RequestParam(required = false) semesterId: Long?,
-        model: Model
-    ): String {
+    fun scrapingManagement(@RequestParam(required = false) semesterId: Long?, model: Model): String {
         val activeSemesters = semesterService.getActiveSemesters()
         val currentSemester =
             semesterId?.let { id -> activeSemesters.find { it.id == id } }
@@ -47,7 +44,9 @@ class DataController(
         val scrapingRuns =
             if (currentSemester != null) {
                 changeTrackingService.getScrapingRunsForSemester(currentSemester.id!!)
-            } else emptyList()
+            } else {
+                emptyList()
+            }
 
         val progress = tubafScrapingService.getProgressSnapshot()
 
@@ -69,30 +68,25 @@ class DataController(
     }
 
     @PostMapping("/scraping/run/{semesterId}")
-    fun runScraping(
-        @PathVariable semesterId: Long,
-        redirectAttributes: RedirectAttributes
-    ): String {
-        return try {
-            val semester =
-                semesterService.getAllSemesters().find { it.id == semesterId }
-                    ?: throw IllegalArgumentException("Semester not found")
+    fun runScraping(@PathVariable semesterId: Long, redirectAttributes: RedirectAttributes): String = try {
+        val semester =
+            semesterService.getAllSemesters().find { it.id == semesterId }
+                ?: throw IllegalArgumentException("Semester not found")
 
-            val result = tubafScrapingService.scrapeSemesterData(semester)
+        val result = tubafScrapingService.scrapeSemesterData(semester)
 
-            redirectAttributes.addFlashAttribute(
-                "successMessage",
-                "Scraping erfolgreich: ${result.totalEntries} Einträge verarbeitet (${result.newEntries} neu, ${result.updatedEntries} aktualisiert)"
-            )
+        redirectAttributes.addFlashAttribute(
+            "successMessage",
+            "Scraping erfolgreich: ${result.totalEntries} Einträge verarbeitet (${result.newEntries} neu, ${result.updatedEntries} aktualisiert)",
+        )
 
-            "redirect:/data/scraping?semesterId=$semesterId"
-        } catch (e: Exception) {
-            redirectAttributes.addFlashAttribute(
-                "errorMessage",
-                "Scraping fehlgeschlagen: ${e.message}"
-            )
-            "redirect:/data/scraping"
-        }
+        "redirect:/data/scraping?semesterId=$semesterId"
+    } catch (e: Exception) {
+        redirectAttributes.addFlashAttribute(
+            "errorMessage",
+            "Scraping fehlgeschlagen: ${e.message}",
+        )
+        "redirect:/data/scraping"
     }
 
     @GetMapping("/scraping/run/{runId}")

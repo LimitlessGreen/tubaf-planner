@@ -46,7 +46,7 @@ class ScrapingController(
                     "shortName" to it.shortName,
                     "startDate" to it.startDate,
                     "endDate" to it.endDate,
-                    "active" to it.active
+                    "active" to it.active,
                 )
             }
         response["remoteSemesters"] = remoteSemesters
@@ -60,7 +60,7 @@ class ScrapingController(
                         "endTime" to it.endTime,
                         "totalEntries" to it.totalEntries,
                         "newEntries" to it.newEntries,
-                        "updatedEntries" to it.updatedEntries
+                        "updatedEntries" to it.updatedEntries,
                     )
                 }
             }
@@ -70,9 +70,7 @@ class ScrapingController(
 
     @PostMapping("/semester/{semesterId}/scrape")
     @Operation(summary = "Scrape TUBAF data for specific semester")
-    fun scrapeSemester(
-        @Parameter(description = "Semester ID to scrape") @PathVariable semesterId: Long
-    ): ResponseEntity<Map<String, Any>> {
+    fun scrapeSemester(@Parameter(description = "Semester ID to scrape") @PathVariable semesterId: Long): ResponseEntity<Map<String, Any>> {
         logger.info("Manual scraping requested for semester ID: $semesterId")
 
         semesterService.getAllSemesters().find { it.id == semesterId }
@@ -84,7 +82,7 @@ class ScrapingController(
             if (!started) {
                 ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(
-                        mapOf("success" to false, "message" to "Bereits laufender Scraping-Prozess")
+                        mapOf("success" to false, "message" to "Bereits laufender Scraping-Prozess"),
                     )
             } else {
                 ResponseEntity.ok(mapOf("success" to true, "message" to "Scraping gestartet"))
@@ -106,7 +104,7 @@ class ScrapingController(
             if (!started) {
                 ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(
-                        mapOf("success" to false, "message" to "Bereits laufender Scraping-Prozess")
+                        mapOf("success" to false, "message" to "Bereits laufender Scraping-Prozess"),
                     )
             } else {
                 ResponseEntity.ok(mapOf("success" to true, "message" to "Scraping gestartet"))
@@ -125,55 +123,46 @@ class ScrapingController(
 
     @GetMapping("/runs/{runId}/changes")
     @Operation(summary = "Get changes for scraping run")
-    fun getScrapingRunChanges(
-        @Parameter(description = "Scraping run ID") @PathVariable runId: Long
-    ) = ResponseEntity.ok(changeTrackingService.getChangesForScrapingRun(runId))
+    fun getScrapingRunChanges(@Parameter(description = "Scraping run ID") @PathVariable runId: Long) =
+        ResponseEntity.ok(changeTrackingService.getChangesForScrapingRun(runId))
 
     @GetMapping("/runs/{runId}/statistics")
     @Operation(summary = "Get change statistics for scraping run")
-    fun getScrapingRunStatistics(
-        @Parameter(description = "Scraping run ID") @PathVariable runId: Long
-    ) = ResponseEntity.ok(changeTrackingService.getChangeStatistics(runId))
+    fun getScrapingRunStatistics(@Parameter(description = "Scraping run ID") @PathVariable runId: Long) =
+        ResponseEntity.ok(changeTrackingService.getChangeStatistics(runId))
 
     @GetMapping("/semester/{semesterId}/last-successful")
     @Operation(summary = "Get last successful scraping run for semester")
-    fun getLastSuccessfulRun(
-        @Parameter(description = "Semester ID") @PathVariable semesterId: Long
-    ) = ResponseEntity.ok(changeTrackingService.getLastSuccessfulRun(semesterId))
+    fun getLastSuccessfulRun(@Parameter(description = "Semester ID") @PathVariable semesterId: Long) =
+        ResponseEntity.ok(changeTrackingService.getLastSuccessfulRun(semesterId))
 
     @GetMapping("/available-semesters")
     @Operation(summary = "Get semesters available on the TUBAF website")
-    fun getAvailableSemesters(): ResponseEntity<List<RemoteSemesterDescriptor>> {
-        return try {
-            ResponseEntity.ok(tubafScrapingService.getAvailableRemoteSemesters())
-        } catch (e: Exception) {
-            logger.error("Fehler beim Laden der verfügbaren Semester", e)
-            ResponseEntity.internalServerError().build()
-        }
+    fun getAvailableSemesters(): ResponseEntity<List<RemoteSemesterDescriptor>> = try {
+        ResponseEntity.ok(tubafScrapingService.getAvailableRemoteSemesters())
+    } catch (e: Exception) {
+        logger.error("Fehler beim Laden der verfügbaren Semester", e)
+        ResponseEntity.internalServerError().build()
     }
 
     @GetMapping("/remote-semesters")
     @Operation(
         summary =
-            "Get semesters available on the TUBAF website (deprecated, use /available-semesters)"
+        "Get semesters available on the TUBAF website (deprecated, use /available-semesters)",
     )
     @Deprecated("Use /available-semesters instead")
-    fun getRemoteSemesters(): ResponseEntity<List<RemoteSemesterDescriptor>> {
-        return getAvailableSemesters()
-    }
+    fun getRemoteSemesters(): ResponseEntity<List<RemoteSemesterDescriptor>> = getAvailableSemesters()
 
     @PostMapping("/scrape-semesters")
     @Operation(summary = "Scrape specific semesters from TUBAF website")
-    fun scrapeSemesters(
-        @RequestBody request: SemesterScrapeRequest
-    ): ResponseEntity<Map<String, Any>> {
+    fun scrapeSemesters(@RequestBody request: SemesterScrapeRequest): ResponseEntity<Map<String, Any>> {
         if (request.semesterIdentifiers.isEmpty()) {
             return ResponseEntity.badRequest()
                 .body(
                     mapOf<String, Any>(
                         "success" to false,
-                        "message" to "Es wurden keine Semester angegeben"
-                    )
+                        "message" to "Es wurden keine Semester angegeben",
+                    ),
                 )
         }
 
@@ -184,12 +173,12 @@ class ScrapingController(
                     .body(
                         mapOf<String, Any>(
                             "success" to false,
-                            "message" to "Bereits laufender Scraping-Prozess"
-                        )
+                            "message" to "Bereits laufender Scraping-Prozess",
+                        ),
                     )
             } else {
                 ResponseEntity.ok(
-                    mapOf<String, Any>("success" to true, "message" to "Scraping gestartet")
+                    mapOf<String, Any>("success" to true, "message" to "Scraping gestartet"),
                 )
             }
         } catch (e: IllegalArgumentException) {
@@ -198,8 +187,8 @@ class ScrapingController(
                 .body(
                     mapOf<String, Any>(
                         "success" to false,
-                        "message" to (e.message ?: "Ungültige Semesterangabe")
-                    )
+                        "message" to (e.message ?: "Ungültige Semesterangabe"),
+                    ),
                 )
         } catch (e: Exception) {
             logger.error("Fehler beim Scraping", e)
@@ -207,8 +196,8 @@ class ScrapingController(
                 .body(
                     mapOf<String, Any>(
                         "success" to false,
-                        "message" to (e.message ?: "Unbekannter Fehler")
-                    )
+                        "message" to (e.message ?: "Unbekannter Fehler"),
+                    ),
                 )
         }
     }
@@ -216,17 +205,14 @@ class ScrapingController(
     @PostMapping("/scrape-remote")
     @Operation(summary = "Scrape specific semesters (deprecated, use /scrape-semesters)")
     @Deprecated("Use /scrape-semesters instead")
-    fun scrapeRemoteSemesters(
-        @RequestBody request: RemoteScrapeRequest
-    ): ResponseEntity<Map<String, Any>> {
-        return scrapeSemesters(SemesterScrapeRequest(request.semesters))
-    }
+    fun scrapeRemoteSemesters(@RequestBody request: RemoteScrapeRequest): ResponseEntity<Map<String, Any>> =
+        scrapeSemesters(SemesterScrapeRequest(request.semesters))
 
     @PostMapping("/discover-and-scrape")
     @Operation(summary = "Discover available semesters and scrape TUBAF data automatically")
     fun discoverAndScrape(): ResponseEntity<Map<String, Any>> {
         logger.info(
-            "🧪 Discovery and scraping started - will find and scrape all available semesters"
+            "🧪 Discovery and scraping started - will find and scrape all available semesters",
         )
 
         return try {
@@ -236,12 +222,12 @@ class ScrapingController(
                     .body(
                         mapOf<String, Any>(
                             "success" to false,
-                            "message" to "Bereits laufender Scraping-Prozess"
-                        )
+                            "message" to "Bereits laufender Scraping-Prozess",
+                        ),
                     )
             } else {
                 ResponseEntity.ok(
-                    mapOf<String, Any>("success" to true, "message" to "Scraping gestartet")
+                    mapOf<String, Any>("success" to true, "message" to "Scraping gestartet"),
                 )
             }
         } catch (e: Exception) {
@@ -250,8 +236,8 @@ class ScrapingController(
                 .body(
                     mapOf<String, Any>(
                         "success" to false,
-                        "message" to "Discovery and scraping failed: ${e.message}"
-                    )
+                        "message" to "Discovery and scraping failed: ${e.message}",
+                    ),
                 )
         }
     }
@@ -291,8 +277,8 @@ class ScrapingController(
             ResponseEntity.ok(
                 mapOf<String, Any>(
                     "success" to false,
-                    "message" to "Cancellation noch nicht implementiert - bitte Backend erweitern"
-                )
+                    "message" to "Cancellation noch nicht implementiert - bitte Backend erweitern",
+                ),
             )
         } catch (e: Exception) {
             logger.error("Error cancelling scraping", e)
@@ -300,8 +286,8 @@ class ScrapingController(
                 .body(
                     mapOf<String, Any>(
                         "success" to false,
-                        "message" to (e.message ?: "Unbekannter Fehler")
-                    )
+                        "message" to (e.message ?: "Unbekannter Fehler"),
+                    ),
                 )
         }
     }
@@ -316,8 +302,8 @@ class ScrapingController(
                 .body(
                     mapOf<String, Any>(
                         "success" to false,
-                        "message" to "Es wurden keine Semester angegeben"
-                    )
+                        "message" to "Es wurden keine Semester angegeben",
+                    ),
                 )
         }
 
@@ -328,8 +314,8 @@ class ScrapingController(
                     .body(
                         mapOf<String, Any>(
                             "success" to false,
-                            "message" to "Bereits laufender Scraping-Prozess"
-                        )
+                            "message" to "Bereits laufender Scraping-Prozess",
+                        ),
                     )
             }
 
@@ -367,8 +353,8 @@ class ScrapingController(
                 .body(
                     mapOf<String, Any>(
                         "success" to false,
-                        "message" to (e.message ?: "Unbekannter Fehler")
-                    )
+                        "message" to (e.message ?: "Unbekannter Fehler"),
+                    ),
                 )
         }
     }

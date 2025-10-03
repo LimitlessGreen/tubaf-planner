@@ -1,10 +1,10 @@
 package de.tubaf.planner.controller
 
 import de.tubaf.planner.service.*
-import java.time.DayOfWeek
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.*
+import java.time.DayOfWeek
 
 @Controller("scheduleApiController")
 @RequestMapping("/api/schedule")
@@ -12,7 +12,7 @@ class ScheduleController(
     private val scheduleService: ScheduleService,
     private val semesterService: SemesterService,
     private val studyProgramService: StudyProgramService,
-    private val roomService: RoomService
+    private val roomService: RoomService,
 ) {
 
     @GetMapping
@@ -29,11 +29,7 @@ class ScheduleController(
     }
 
     @GetMapping("/semester/{semesterId}")
-    fun showSemesterSchedule(
-        @PathVariable semesterId: Long,
-        @RequestParam(required = false) studyProgramId: Long?,
-        model: Model
-    ): String {
+    fun showSemesterSchedule(@PathVariable semesterId: Long, @RequestParam(required = false) studyProgramId: Long?, model: Model): String {
         val allSemesters = semesterService.getAllSemesters()
         val semester = allSemesters.find { it.id == semesterId } ?: return "redirect:/schedule"
 
@@ -51,11 +47,7 @@ class ScheduleController(
     }
 
     @GetMapping("/semester/{semesterId}/studyprogram/{studyProgramId}")
-    fun studyProgramSchedule(
-        @PathVariable semesterId: Long,
-        @PathVariable studyProgramId: Long,
-        model: Model
-    ): String {
+    fun studyProgramSchedule(@PathVariable semesterId: Long, @PathVariable studyProgramId: Long, model: Model): String {
         val semesters = semesterService.getAllSemesters()
         val semester =
             semesters.find { it.id == semesterId }
@@ -98,9 +90,7 @@ class ScheduleController(
         return "schedule/rooms"
     }
 
-    private fun createScheduleGrid(
-        scheduleEntries: List<de.tubaf.planner.model.ScheduleEntry>
-    ): Map<DayOfWeek, List<ScheduleGridEntry>> {
+    private fun createScheduleGrid(scheduleEntries: List<de.tubaf.planner.model.ScheduleEntry>): Map<DayOfWeek, List<ScheduleGridEntry>> {
         val grid = mutableMapOf<DayOfWeek, MutableList<ScheduleGridEntry>>()
 
         // Initialize empty grid
@@ -115,8 +105,8 @@ class ScheduleController(
                     courseName = entry.course.name,
                     courseType = entry.course.courseType.code,
                     lecturer = entry.course.lecturer.name,
-                    room = "${entry.room.building}/${entry.room.roomNumber}"
-                )
+                    room = "${entry.room.building}/${entry.room.roomNumber}",
+                ),
             )
         }
 
@@ -133,7 +123,7 @@ data class ScheduleGridEntry(
     val courseName: String,
     val courseType: String,
     val lecturer: String,
-    val room: String
+    val room: String,
 )
 
 data class RoomUtilizationData(
@@ -143,5 +133,5 @@ data class RoomUtilizationData(
     val utilizationPercentage: Double,
     val uniqueCourses: Int,
     val peakHours: List<Int>,
-    val mostUsedDay: String?
+    val mostUsedDay: String?,
 )

@@ -1,10 +1,10 @@
 package de.tubaf.planner.repository
 
 import de.tubaf.planner.model.Semester
-import java.time.LocalDate
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Repository
+import java.time.LocalDate
 
 @Repository
 interface SemesterRepository : JpaRepository<Semester, Long> {
@@ -20,7 +20,7 @@ interface SemesterRepository : JpaRepository<Semester, Long> {
         SELECT s FROM Semester s 
         WHERE s.active = true 
         ORDER BY s.startDate DESC
-        """
+        """,
     )
     fun findActiveSemesters(): List<Semester>
 
@@ -28,7 +28,7 @@ interface SemesterRepository : JpaRepository<Semester, Long> {
         """
         SELECT s FROM Semester s 
         WHERE :date BETWEEN s.startDate AND s.endDate
-        """
+        """,
     )
     fun findByDate(date: LocalDate): List<Semester>
 
@@ -37,7 +37,7 @@ interface SemesterRepository : JpaRepository<Semester, Long> {
         SELECT s FROM Semester s 
         WHERE s.active = true 
         AND :date BETWEEN s.startDate AND s.endDate
-        """
+        """,
     )
     fun findCurrentSemester(date: LocalDate = LocalDate.now()): Semester?
 
@@ -46,7 +46,7 @@ interface SemesterRepository : JpaRepository<Semester, Long> {
         SELECT s FROM Semester s 
         ORDER BY s.startDate DESC
         LIMIT 1
-        """
+        """,
     )
     fun findLatestSemester(): Semester?
 }
