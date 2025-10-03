@@ -31,7 +31,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("org.springframework.boot:spring-boot-starter-webflux")
+    // Removed spring-boot-starter-webflux (kein reactive WebClient/Flux/Mono Einsatz) -> reduziert Startzeit & Footprint
     implementation("org.springframework.boot:spring-boot-starter-thymeleaf")
 	
     // WebJars for Frontend Libraries
@@ -39,6 +39,7 @@ dependencies {
     implementation("org.webjars:jquery:3.7.1")
     implementation("org.webjars:font-awesome:6.4.2")
     implementation("org.webjars.npm:chart.js:4.5.0")
+    implementation("org.webjars:webjars-locator-core") // Ermöglicht versionlose WebJar Pfade im Template
 	
     // Kotlin & Coroutines
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
@@ -56,8 +57,7 @@ dependencies {
     implementation("org.jsoup:jsoup:1.21.2")
     implementation("com.squareup.okhttp3:okhttp:5.1.0")
     implementation("com.squareup.okhttp3:okhttp-urlconnection:5.1.0")
-    implementation("io.ktor:ktor-client-core:3.3.0")
-    implementation("io.ktor:ktor-client-cio:3.3.0")
+    // Entfernt: io.ktor client libs (nicht verwendet) – falls in Zukunft benötigt, gezielt wieder hinzufügen
 	
     // API Documentation
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
