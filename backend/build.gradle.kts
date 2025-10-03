@@ -1,9 +1,9 @@
 plugins {
-    kotlin("jvm") version "2.0.21"
-    kotlin("plugin.spring") version "2.0.21"
+    kotlin("jvm") version "2.2.0"
+    kotlin("plugin.spring") version "2.2.0"
     id("org.springframework.boot") version "3.5.6"
     id("io.spring.dependency-management") version "1.1.6"
-    kotlin("plugin.jpa") version "2.0.21"
+    kotlin("plugin.jpa") version "2.2.0"
     // id("io.gitlab.arturbosch.detekt") version "1.23.4" // Deaktiviert für jetzt
     id("com.diffplug.spotless") version "6.25.0"
 }
@@ -43,7 +43,7 @@ dependencies {
     // Kotlin & Coroutines
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("io.projectreactor.kotlin:reactor-kotlin-extensions")
-    implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("org.jetbrains.kotlin:kotlin-reflect:2.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
 	
@@ -52,12 +52,12 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("com.h2database:h2") // For development/testing
-        // Web Scraping & HTTP
-        implementation("org.jsoup:jsoup:1.18.1")
-        implementation("com.squareup.okhttp3:okhttp:5.1.0")
-        implementation("com.squareup.okhttp3:okhttp-urlconnection:5.1.0")
-        implementation("io.ktor:ktor-client-core:2.3.12")
-        implementation("io.ktor:ktor-client-cio:2.3.12")
+    // Web Scraping & HTTP
+    implementation("org.jsoup:jsoup:1.18.1")
+    implementation("com.squareup.okhttp3:okhttp:5.1.0")
+    implementation("com.squareup.okhttp3:okhttp-urlconnection:5.1.0")
+    implementation("io.ktor:ktor-client-core:2.3.12")
+    implementation("io.ktor:ktor-client-cio:2.3.12")
 	
     // API Documentation
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
@@ -73,7 +73,7 @@ dependencies {
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("io.projectreactor:reactor-test")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5:2.2.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
@@ -114,7 +114,7 @@ spotless {
         kotlin {
             // Alle Kotlin-Quellen formatieren – Umstellung von ktfmt (Crash) auf ktlint
             target("src/**/*.kt")
-            ktlint("1.3.1").editorConfigOverride(
+            ktlint("1.4.0").editorConfigOverride(
                 mapOf(
                     // Beispiele für Regeln / Overrides – anpassbar
                     "indent_size" to "4",
@@ -125,7 +125,7 @@ spotless {
         }
         kotlinGradle {
             target("*.gradle.kts")
-            ktlint("1.3.1")
+            ktlint("1.4.0")
         }
         format("misc") {
             target("*.md", ".gitignore")

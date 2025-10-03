@@ -92,6 +92,10 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        preferred_enum_type: string
   
   flyway:
     enabled: false
@@ -108,6 +112,8 @@ spring:
   config:
     activate:
       on-profile: test
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
   
   datasource:
     url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
@@ -118,6 +124,13 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        preferred_enum_type: string
+
+  flyway:
+    enabled: false
 
 tubaf:
   scraper:
