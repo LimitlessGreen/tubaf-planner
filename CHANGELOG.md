@@ -5,9 +5,6 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 und die Versionierung folgt (perspektivisch) [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
-_(noch keine Änderungen – neue Punkte hier hinzufügen)_
-
-## [0.1.0] - 2025-10-03
 ### Hinzugefügt
 - PostgreSQL: Funktionaler Unique Index `ux_courses_semester_lower_name` auf `(semester_id, lower(name))` für fallunabhängig eindeutige Kursnamen je Semester.
 - H2 (Tests): Separater einfacher Unique Index (Migration `V3_1__H2_Course_Name_Unique_Index.sql`).

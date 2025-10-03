@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "de.tubaf"
-version = "0.1.0"
+version = "0.0.1-SNAPSHOT" // Rollback auf Snapshot, kein Release gewünscht
 description = "TUBAF Schedule Planning and Management System with Kotlin"
 
 java {
