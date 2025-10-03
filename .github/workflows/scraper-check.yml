@@ -1,0 +1,67 @@
+name: Scraper Verification
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/scraper-check.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/scraper-check.yml'
+
+jobs:
+  scraper-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Run scraper verification
+        id: scraper-test
+        continue-on-error: true
+        working-directory: backend
+        run: |
+          set -eo pipefail
+          ./gradlew test --tests "de.tubaf.planner.ScrapingJsonReportTest" | tee ../scraper-report.log
+
+      - name: Publish scraping report
+        if: always()
+        run: |
+          if [ ! -f scraper-report.log ]; then
+            echo "scraper-report.log not found" >&2
+            exit 1
+          fi
+
+          start_line=$(grep -n "SCRAPING_REPORT_START" scraper-report.log | cut -d: -f1 | tail -n 1)
+          end_line=$(grep -n "SCRAPING_REPORT_END" scraper-report.log | cut -d: -f1 | tail -n 1)
+
+          if [ -z "$start_line" ] || [ -z "$end_line" ]; then
+            echo "Scraping report markers not found" >&2
+            exit 1
+          fi
+
+          start_line=$((start_line + 1))
+          end_line=$((end_line - 1))
+
+          report=$(sed -n "${start_line},${end_line}p" scraper-report.log)
+          echo "Scraping report:" "$report"
+          {
+            echo "## Scraping Report"
+            echo '```json'
+            echo "$report"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if scraper verification failed
+        if: steps.scraper-test.outcome == 'failure'
+        run: exit 1
