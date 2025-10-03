@@ -100,7 +100,11 @@ allOpen {
 }
 
 tasks.withType<Test> {
-	useJUnitPlatform()
+        useJUnitPlatform()
+
+        testLogging {
+                showStandardStreams = true
+        }
 }
 
 // Code Quality & Formatting
