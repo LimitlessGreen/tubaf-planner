@@ -291,12 +291,6 @@ class TestController(
                     newEntries = 5,
                     updatedEntries = 0,
                     studyProgramsProcessed = 1,
-                    roomPlansProcessed = 0,
-                    roomPlanEntries = 0,
-                    roomPlanEntriesNew = 0,
-                    roomPlanEntriesUpdated = 0,
-                    roomPlanEntriesDeactivated = 0,
-                    roomsUpdatedFromPlans = 0,
                 ),
             )
         } catch (e: Exception) {
