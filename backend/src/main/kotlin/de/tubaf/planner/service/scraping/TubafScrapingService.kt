@@ -936,17 +936,15 @@ open class TubafScrapingService(
 
         for (row in scheduleTable.select("tr")) {
             val cells = row.select("td")
-            if (cells.isEmpty()) {
-                continue
-            }
+            if (cells.isEmpty()) continue
 
             if (cells.size == 1) {
-                val text = cells.first().text().trim()
-                val colspan = cells.first().attr("colspan")
-                if (colspan == "9") {
-                    currentCategory = text
-                } else if (colspan == "8") {
-                    currentGroup = text
+                val firstCell = cells.firstOrNull()
+                val text = firstCell?.text()?.trim().orEmpty()
+                val colspan = firstCell?.attr("colspan") ?: ""
+                when (colspan) {
+                    "9" -> currentCategory = text
+                    "8" -> currentGroup = text
                 }
                 continue
             }
