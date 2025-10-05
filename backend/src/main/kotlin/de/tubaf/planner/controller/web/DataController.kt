@@ -50,15 +50,29 @@ class DataController(
 
         val progress = tubafScrapingService.getProgressSnapshot()
 
+        // Statistiken für alle Semester berechnen
+        val allSemesters = semesterService.getAllSemesters()
+        val allRuns = allSemesters.mapNotNull { semester ->
+            changeTrackingService.getLastSuccessfulRun(semester.id!!)
+        }
+        val totalEntries = allRuns.sumOf { it.totalEntries ?: 0 }
+        val globalLastRun = allRuns.maxByOrNull { it.startTime }
+
         model.addAttribute("semesters", activeSemesters)
-        model.addAttribute("availableSemesters", semesterService.getAllSemesters())
+        model.addAttribute("availableSemesters", allSemesters)
         model.addAttribute("currentSemester", currentSemester)
         model.addAttribute("scrapingRuns", scrapingRuns)
         model.addAttribute("logs", progress.logs)
         model.addAttribute("scrapingActive", progress.status == ScrapingStatus.RUNNING)
-        model.addAttribute("successfulRuns", scrapingRuns.count { it.status.name == "COMPLETED" })
+
+        // Statistik-Karten Werte
+        model.addAttribute("totalSemesters", allSemesters.size)
+        model.addAttribute("successfulRuns", allRuns.size)
+        model.addAttribute("totalEntries", totalEntries)
+        model.addAttribute("lastRun", globalLastRun)
+
+        // Bisherige Detail-Statistiken für aktuelles Semester
         model.addAttribute("failedRuns", scrapingRuns.count { it.status.name == "FAILED" })
-        model.addAttribute("lastRun", scrapingRuns.firstOrNull())
         model.addAttribute("overallProgress", progress.progress)
         model.addAttribute("currentTask", progress.message ?: progress.currentTask)
         model.addAttribute("processedCount", progress.processedCount)
@@ -91,12 +105,14 @@ class DataController(
 
     @GetMapping("/scraping/run/{runId}")
     fun scrapingRunDetail(@PathVariable runId: Long, model: Model): String {
+        val run = changeTrackingService.getScrapingRun(runId)
         val changes = changeTrackingService.getChangesForScrapingRun(runId)
         val statistics = changeTrackingService.getChangeStatistics(runId)
 
-        model.addAttribute("runId", runId)
+        model.addAttribute("run", run)
+        model.addAttribute("semester", run.semester)
         model.addAttribute("changes", changes)
-        model.addAttribute("statistics", statistics)
+        model.addAttribute("changeStatistics", statistics)
 
         return "data/scraping-detail"
     }

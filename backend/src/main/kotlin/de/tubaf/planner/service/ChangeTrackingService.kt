@@ -107,7 +107,9 @@ class ChangeTrackingService(
     @Transactional(readOnly = true)
     fun getLastSuccessfulRun(semesterId: Long): ScrapingRun? = scrapingRunRepository.findLastSuccessfulRun(semesterId)
 
-    private fun getScrapingRun(scrapingRunId: Long): ScrapingRun = scrapingRunRepository.findByIdOrNull(scrapingRunId)
+    /** Gibt einen Scraping-Lauf anhand der ID zurück */
+    @Transactional(readOnly = true)
+    fun getScrapingRun(scrapingRunId: Long): ScrapingRun = scrapingRunRepository.findByIdOrNull(scrapingRunId)
         ?: throw IllegalArgumentException("ScrapingRun with ID $scrapingRunId not found")
 }
 

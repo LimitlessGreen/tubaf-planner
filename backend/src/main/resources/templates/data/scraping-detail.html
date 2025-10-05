@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout/base :: layout(~{::title}, ~{::content})}">
+<head>
+    <title>Scraping-Lauf Details</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --light-bg: #f8f9fa;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light-bg);
+            color: var(--primary-color);
+        }
+        
+        .page-header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+            border-left: 4px solid var(--accent-color);
+        }
+        
+        .stat-card.success { border-left-color: var(--success-color); }
+        .stat-card.warning { border-left-color: var(--warning-color); }
+        .stat-card.danger { border-left-color: var(--danger-color); }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+        
+        .change-item {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid #dee2e6;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .change-item.created { border-left-color: var(--success-color); }
+        .change-item.updated { border-left-color: var(--warning-color); }
+        .change-item.deleted { border-left-color: var(--danger-color); }
+        
+        .change-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .entity-info {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+        
+        .change-type-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+        }
+        
+        .field-change {
+            background: var(--light-bg);
+            border-radius: 0.25rem;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+        }
+        
+        .field-name {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 0.25rem;
+        }
+        
+        .value-change {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .old-value {
+            color: var(--danger-color);
+            text-decoration: line-through;
+            opacity: 0.7;
+        }
+        
+        .new-value {
+            color: var(--success-color);
+            font-weight: 500;
+        }
+        
+        .filter-tabs {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .filter-tab {
+            border: none;
+            background: transparent;
+            padding: 0.5rem 1rem;
+            margin: 0 0.25rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .filter-tab:hover {
+            background: var(--light-bg);
+        }
+        
+        .filter-tab.active {
+            background: var(--accent-color);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+<div th:fragment="content">
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="mb-2">
+                        <i class="fas fa-history me-2"></i>Scraping-Lauf Details
+                    </h1>
+                    <p class="mb-0" th:if="${semester != null}">
+                        <i class="fas fa-calendar-alt me-2"></i>
+                        <span th:text="${semester.name}">Semester</span>
+                        <span th:if="${semester.shortName != null}" 
+                              class="badge bg-light text-dark ms-2" 
+                              th:text="${semester.shortName}">SS24</span>
+                    </p>
+                </div>
+                <a th:href="@{/data/scraping}" class="btn btn-light">
+                    <i class="fas fa-arrow-left me-2"></i>Zurück
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid mb-5">
+        <!-- Run Info -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-clock fa-2x text-primary me-3"></i>
+                            <div>
+                                <small class="text-muted">Startzeitpunkt</small>
+                                <div th:text="${#temporals.format(run.startTime, 'dd.MM.yyyy HH:mm:ss')}">01.01.2024 12:00:00</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-stopwatch fa-2x text-primary me-3"></i>
+                            <div>
+                                <small class="text-muted">Endzeitpunkt</small>
+                                <div th:if="${run.endTime != null}" 
+                                     th:text="${#temporals.format(run.endTime, 'dd.MM.yyyy HH:mm:ss')}">01.01.2024 12:05:00</div>
+                                <div th:if="${run.endTime == null}" class="text-muted">-</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-hourglass-half fa-2x text-primary me-3"></i>
+                            <div>
+                                <small class="text-muted">Dauer</small>
+                                <div th:if="${run.endTime != null}" 
+                                     th:text="${T(java.time.Duration).between(run.startTime, run.endTime).getSeconds()} + ' Sekunden'">5 Sekunden</div>
+                                <div th:if="${run.endTime == null}" class="text-muted">Läuft noch...</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-info-circle fa-2x text-primary me-3"></i>
+                            <div>
+                                <small class="text-muted">Status</small>
+                                <div>
+                                    <span th:class="${'badge ' + (run.status.name() == 'COMPLETED' ? 'bg-success' : 'bg-danger')}" 
+                                          th:text="${run.status}">COMPLETED</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div th:if="${run.errorMessage != null}" class="alert alert-danger mt-3 mb-0">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Fehler:</strong> <span th:text="${run.errorMessage}">Error message</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" th:text="${run.totalEntries}">0</div>
+                <div class="stat-label">
+                    <i class="fas fa-database me-1"></i>Gesamte Einträge
+                </div>
+            </div>
+            <div class="stat-card success">
+                <div class="stat-value text-success" th:text="${run.newEntries}">0</div>
+                <div class="stat-label">
+                    <i class="fas fa-plus-circle me-1"></i>Neue Einträge
+                </div>
+            </div>
+            <div class="stat-card warning">
+                <div class="stat-value text-warning" th:text="${run.updatedEntries}">0</div>
+                <div class="stat-label">
+                    <i class="fas fa-edit me-1"></i>Aktualisierte Einträge
+                </div>
+            </div>
+            <div class="stat-card danger">
+                <div class="stat-value text-danger" th:text="${changeStatistics != null ? changeStatistics.deleted : 0}">0</div>
+                <div class="stat-label">
+                    <i class="fas fa-minus-circle me-1"></i>Entfernte Einträge
+                </div>
+            </div>
+        </div>
+
+        <!-- Change Statistics from ChangeTrackingService -->
+        <div th:if="${changeStatistics != null}" class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-bar me-2 text-primary"></i>Änderungsstatistik
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-4">
+                        <div class="mb-2">
+                            <span class="badge bg-primary" style="font-size: 1.25rem; padding: 0.5rem 1rem;" 
+                                  th:text="${changeStatistics.total}">0</span>
+                        </div>
+                        <small class="text-muted">Gesamte Änderungen</small>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-2">
+                            <span class="badge bg-success" style="font-size: 1.25rem; padding: 0.5rem 1rem;" 
+                                  th:text="${changeStatistics.created}">0</span>
+                        </div>
+                        <small class="text-muted">Neu erstellt</small>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-2">
+                            <span class="badge bg-warning text-dark" style="font-size: 1.25rem; padding: 0.5rem 1rem;" 
+                                  th:text="${changeStatistics.updated}">0</span>
+                        </div>
+                        <small class="text-muted">Aktualisiert</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Changes -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="mb-0">
+                    <i class="fas fa-list-ul me-2 text-primary"></i>Detaillierte Änderungen
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Filter Tabs -->
+                <div class="filter-tabs">
+                    <button class="filter-tab active" onclick="filterChanges('all')">
+                        <i class="fas fa-list me-1"></i>Alle
+                        <span class="badge bg-secondary ms-1" th:text="${changes.size()}">0</span>
+                    </button>
+                    <button class="filter-tab" onclick="filterChanges('CREATED')">
+                        <i class="fas fa-plus-circle me-1"></i>Neu
+                        <span class="badge bg-success ms-1" th:text="${changeStatistics != null ? changeStatistics.created : 0}">0</span>
+                    </button>
+                    <button class="filter-tab" onclick="filterChanges('UPDATED')">
+                        <i class="fas fa-edit me-1"></i>Aktualisiert
+                        <span class="badge bg-warning text-dark ms-1" th:text="${changeStatistics != null ? changeStatistics.updated : 0}">0</span>
+                    </button>
+                    <button class="filter-tab" onclick="filterChanges('DELETED')">
+                        <i class="fas fa-minus-circle me-1"></i>Entfernt
+                        <span class="badge bg-danger ms-1" th:text="${changeStatistics != null ? changeStatistics.deleted : 0}">0</span>
+                    </button>
+                </div>
+
+                <div id="changesContainer">
+                    <div th:if="${changes == null or changes.empty}" class="text-center text-muted py-5">
+                        <i class="fas fa-info-circle fa-2x mb-2"></i>
+                        <p class="mb-0">Keine Änderungen aufgezeichnet</p>
+                    </div>
+                    
+                    <div th:if="${changes != null and !changes.empty}">
+                        <div th:each="change : ${changes}" 
+                             th:class="'change-item ' + ${change.changeType.name().toLowerCase()}"
+                             th:attr="data-type=${change.changeType.name()}">
+                            <div class="change-header">
+                                <div class="entity-info">
+                                    <i class="fas fa-cube me-2"></i>
+                                    <span th:text="${change.entityType}">EntityType</span>
+                                    <span class="text-muted" th:if="${change.entityId != null}">
+                                        #<span th:text="${change.entityId}">123</span>
+                                    </span>
+                                </div>
+                                <span th:class="'badge change-type-badge ' + 
+                                                (change.changeType.name() == 'CREATED' ? 'bg-success' : 
+                                                 change.changeType.name() == 'UPDATED' ? 'bg-warning text-dark' : 'bg-danger')"
+                                      th:text="${change.changeType}">CREATED</span>
+                            </div>
+                            
+                            <div th:if="${change.fieldName != null}" class="field-change">
+                                <div class="field-name">
+                                    <i class="fas fa-tag me-1"></i>
+                                    <span th:text="${change.fieldName}">fieldName</span>
+                                </div>
+                                <div class="value-change" th:if="${change.oldValue != null or change.newValue != null}">
+                                    <div class="old-value" th:if="${change.oldValue != null}">
+                                        <span th:text="${change.oldValue}">old value</span>
+                                    </div>
+                                    <div class="text-center" th:if="${change.oldValue != null and change.newValue != null}">
+                                        <i class="fas fa-arrow-right"></i>
+                                    </div>
+                                    <div class="new-value" th:if="${change.newValue != null}">
+                                        <span th:text="${change.newValue}">new value</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    <span th:text="${#temporals.format(change.timestamp, 'dd.MM.yyyy HH:mm:ss')}">01.01.2024 12:00:00</span>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function filterChanges(type) {
+            // Update active tab
+            document.querySelectorAll('.filter-tab').forEach(tab => tab.classList.remove('active'));
+            event.target.closest('.filter-tab').classList.add('active');
+            
+            // Filter change items
+            document.querySelectorAll('.change-item').forEach(item => {
+                if (type === 'all') {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = item.getAttribute('data-type') === type ? 'block' : 'none';
+                }
+            });
+        }
+    </script>
+</div>
+</body>
+</html>
