@@ -1478,22 +1478,40 @@ open class TubafScrapingService(
     private fun parseQueryParameters(href: String): Map<String, String> {
         val query = href.substringAfter('?', "")
         if (query.isBlank()) return emptyMap()
-        val raw = query.split('&')
+        return query.split('&')
             .mapNotNull { pair ->
                 if (!pair.contains('=')) return@mapNotNull null
                 val (key, value) = pair.split('=', limit = 2)
-                key to URLDecoder.decode(value, StandardCharsets.UTF_8)
+                key to decodeQueryValue(value)
             }.toMap()
-        if (!enableLegacyEncodingFix) return raw
-        // Reparatur nur, wenn überhaupt ein Replacement Character oder typische Fehlsequenzen vorkommen.
-        return raw.mapValues { (k, v) ->
-            maybeRepairUmlauts(v).also { repaired ->
-                if (repaired != v) {
-                    logger.warn("🔧 Encoding-Fix angewendet (param={}): '{}' -> '{}'", k, v, repaired)
-                }
-            }
-        }
     }
+
+    private fun decodeQueryValue(value: String): String {
+        val decodedUtf8 = URLDecoder.decode(value, StandardCharsets.UTF_8)
+        if (!enableLegacyEncodingFix) {
+            return decodedUtf8
+        }
+
+        val repairedUtf8 = maybeRepairUmlauts(decodedUtf8)
+        if (!repairedUtf8.contains('\uFFFD')) {
+            return repairedUtf8
+        }
+
+        val decodedIso = URLDecoder.decode(value, StandardCharsets.ISO_8859_1)
+        val repairedIso = maybeRepairUmlauts(decodedIso)
+        val isoHasNoReplacement = !repairedIso.contains('\uFFFD')
+        val isoHasMoreUmlauts = repairedIso.count { it in umlautChars } > repairedUtf8.count { it in umlautChars }
+        if (isoHasNoReplacement && (decodedUtf8.contains('\uFFFD') || isoHasMoreUmlauts)) {
+            if (repairedIso != decodedUtf8) {
+                logger.warn("🔁 ISO-8859-1 Fallback für Query-Wert angewendet: '{}' -> '{}'", decodedUtf8, repairedIso)
+            }
+            return repairedIso
+        }
+
+        return repairedUtf8
+    }
+
+    private val umlautChars = setOf('Ä', 'Ö', 'Ü', 'ä', 'ö', 'ü', 'ß')
 
     private fun maybeRepairUmlauts(input: String): String {
         if (input.isEmpty()) return input
@@ -1525,10 +1543,7 @@ open class TubafScrapingService(
                 // Das ist eine grobe Heuristik – wenn dadurch mehr gültige Umlaute entstehen, übernehmen.
                 val bytes = input.toByteArray(StandardCharsets.ISO_8859_1)
                 val candidate = String(bytes, StandardCharsets.UTF_8)
-                val gain =
-                    candidate.count {
-                        it in setOf('Ä', 'Ö', 'Ü', 'ä', 'ö', 'ü', 'ß')
-                    } - input.count { it in setOf('Ä', 'Ö', 'Ü', 'ä', 'ö', 'ü', 'ß') }
+                val gain = candidate.count { it in umlautChars } - input.count { it in umlautChars }
                 if (gain > 0 && !candidate.contains('\uFFFD')) {
                     value = candidate
                 }
