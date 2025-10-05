@@ -116,7 +116,13 @@ open class TubafScrapingService(
         wrapper.inUse.set(0)
     }
 
-    private fun parallelScrapePrograms(semester: Semester, scrapingRunId: Long, programs: List<StudyProgramOption>, stats: ScrapeStats) {
+    private fun parallelScrapePrograms(
+        semester: Semester,
+        scrapingRunId: Long,
+        programs: List<StudyProgramOption>,
+        stats: ScrapeStats,
+        subTaskId: String?,
+    ) {
         if (programs.isEmpty()) return
 
         val maxWorkers = scrapingConfiguration.parallelMaxWorkers.coerceAtLeast(1)
@@ -177,6 +183,14 @@ open class TubafScrapingService(
                             total = programs.size,
                             message = updateMsg,
                         )
+                        if (subTaskId != null) {
+                            progressTracker.updateSubTask(
+                                id = subTaskId,
+                                processed = done,
+                                total = programs.size,
+                                message = updateMsg,
+                            )
+                        }
                         if (interDelay > 0) {
                             Thread.sleep(interDelay)
                         }
@@ -459,7 +473,7 @@ open class TubafScrapingService(
                     )
                 }
 
-                if (!trackProgress && subTaskId != null) {
+                if (subTaskId != null) {
                     progressTracker.updateSubTask(
                         id = subTaskId,
                         processed = 0,
@@ -469,7 +483,7 @@ open class TubafScrapingService(
                 }
 
                 if (scrapingConfiguration.parallelEnabled) {
-                    parallelScrapePrograms(semester, scrapingRun.id!!, programs, stats)
+                    parallelScrapePrograms(semester, scrapingRun.id!!, programs, stats, subTaskId)
                 } else {
                     programs.forEachIndexed { index, program ->
                         ensureNotCancelled()
