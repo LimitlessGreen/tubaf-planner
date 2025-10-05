@@ -65,6 +65,8 @@ open class TubafScrapingService(
     private val meterRegistry: MeterRegistry,
     @Value("\${tubaf.scraper.base-url:https://evlvz.hrz.tu-freiberg.de/~vover}")
     private val baseUrl: String,
+    @Value("\${tubaf.scraper.encoding.fix-legacy:true}")
+    private val enableLegacyEncodingFix: Boolean,
     @Value(
         "\${tubaf.scraper.user-agent:Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36}",
     )
@@ -867,18 +869,51 @@ open class TubafScrapingService(
 
     private fun getOrCreateLecturer(rawText: String, scrapingRunId: Long): Lecturer {
         val parsed = parseLecturerIdentity(rawText)
-        // Primäre Suche nach Name (bestehendes Verhalten, tolerant bzgl. Groß/Kleinschreibung)
-        lecturerRepository.findByNameContainingIgnoreCaseAndActive(parsed.name).firstOrNull()?.let { existing ->
-            // Falls Email neu und im Datensatz fehlt: aktualisieren
-            val needsEmailUpdate = parsed.email != null && existing.email.isNullOrBlank()
-            if (needsEmailUpdate) {
-                existing.email = parsed.email
-                lecturerRepository.save(existing)
+
+        // 1) Falls Email extrahiert wurde: direkter Lookup nach Email (präziser als Name)
+        if (!parsed.email.isNullOrBlank()) {
+            lecturerRepository.findByEmailIgnoreCase(parsed.email!!)?.let { existing ->
+                var changed = false
+                if (parsed.title != null && existing.title.isNullOrBlank()) {
+                    existing.title = parsed.title.take(50)
+                    changed = true
+                }
+                if (parsed.name.isNotBlank() && !existing.name.equals(parsed.name, ignoreCase = true)) {
+                    // Wir überschreiben den Namen nicht direkt (er könnte kuratiert sein), nur loggen.
+                    logger.debug(
+                        "Email match für Lecturer id={} email={} aber Name differiert scraped='{}' stored='{}'",
+                        existing.id,
+                        parsed.email,
+                        parsed.name,
+                        existing.name,
+                    )
+                }
+                if (changed) lecturerRepository.save(existing)
+                return existing
             }
+        }
+
+        // 2) Fallback: Namensbasierte Suche (bestehendes Verhalten)
+        lecturerRepository.findByNameContainingIgnoreCaseAndActive(parsed.name).firstOrNull()?.let { existing ->
+            var updated = false
+            if (parsed.email != null && existing.email.isNullOrBlank()) {
+                existing.email = parsed.email
+                updated = true
+            }
+            if (parsed.title != null && existing.title.isNullOrBlank()) {
+                existing.title = parsed.title.take(50)
+                updated = true
+            }
+            if (updated) lecturerRepository.save(existing)
             return existing
         }
 
-        val lecturer = Lecturer(name = parsed.name, email = parsed.email)
+        // 3) Neu anlegen
+        val lecturer = Lecturer(
+            name = parsed.name,
+            email = parsed.email,
+            title = parsed.title?.take(50),
+        )
         val saved = lecturerRepository.save(lecturer)
         changeTrackingService.logEntityCreated(scrapingRunId, "Lecturer", saved.id!!)
         if (parsed.modified || parsed.truncated) {
@@ -886,23 +921,39 @@ open class TubafScrapingService(
                 if (parsed.modified) add("normalized")
                 if (parsed.truncated) add("truncated")
                 if (parsed.email != null) add("email-extracted")
+                if (!parsed.title.isNullOrBlank()) add("title-extracted")
             }.joinToString(",")
-            logger.info("Lecturer sanitized [{}]: raw='{}' -> name='{}' email='{}'", flags, rawText.take(120), parsed.name, parsed.email)
+            val logMsg = (
+                "Lecturer sanitized [$flags]: raw='${rawText.take(120)}' -> " +
+                    "title='${parsed.title}' name='${parsed.name}' email='${parsed.email}'"
+                )
+            if (logMsg.length > 140) {
+                logger.info(logMsg.take(137) + "...")
+            } else {
+                logger.info(logMsg)
+            }
         }
         return saved
     }
 
-    private data class ParsedLecturer(val name: String, val email: String?, val modified: Boolean, val truncated: Boolean)
+    private data class ParsedLecturer(
+        val name: String,
+        val email: String?,
+        val title: String?,
+        val modified: Boolean,
+        val truncated: Boolean,
+    )
 
     private fun parseLecturerIdentity(raw: String): ParsedLecturer {
         val original = raw
         var value = raw.trim()
         var email: String? = null
+        var title: String? = null
         var modified = false
         var truncated = false
 
         if (value.isBlank()) {
-            return ParsedLecturer(name = "N.N.", email = null, modified = original != "N.N.", truncated = false)
+            return ParsedLecturer(name = "N.N.", email = null, title = null, modified = original != "N.N.", truncated = false)
         }
 
         // Collapse whitespace
@@ -927,6 +978,40 @@ open class TubafScrapingService(
                 .replace(")", " ")
                 .trim()
             modified = true
+        }
+
+        // Extract leading academic titles (sequence) before stripping punctuation.
+        run {
+            val titleTokens = mutableListOf<String>()
+            var remaining = value
+            var progressed = true
+            val tokenRegex = Regex("^(?:(?:[A-Za-zÄÖÜäöü]{1,8}\\.)|(?:[A-Za-zÄÖÜäöü]{2,15}))(?=\\s|$)")
+            val known = setOf(
+                // Akademische Titel/Kürzel (häufige Varianten + Punkte)
+                "prof", "prof.", "dr", "dr.",
+                "dipl.-ing.", "dipl.-ing", "dipl.ing.",
+                "msc", "bsc", "mag", "mag.",
+                "pd", "apl", "apl.",
+                "jun.-prof.", "jun.-prof", "priv.-doz.", "priv.-doz", "habil.",
+            )
+            while (progressed) {
+                progressed = false
+                val m = tokenRegex.find(remaining.trimStart())
+                if (m != null) {
+                    val token = m.value
+                    val norm = token.lowercase()
+                    if (norm in known || (norm.endsWith('.') && norm.dropLast(1).all { it.isLetter() } && norm.length <= 6)) {
+                        titleTokens += token.trimEnd(',')
+                        remaining = remaining.trimStart().substring(m.range.last + 1).trimStart()
+                        progressed = true
+                    }
+                }
+            }
+            if (titleTokens.isNotEmpty()) {
+                title = titleTokens.joinToString(" ").take(50)
+                value = remaining
+                modified = true
+            }
         }
 
         // Strip leading/trailing punctuation
@@ -964,7 +1049,7 @@ open class TubafScrapingService(
             truncated = true
         }
 
-        return ParsedLecturer(name = value, email = email, modified = modified, truncated = truncated)
+        return ParsedLecturer(name = value, email = email, title = title, modified = modified, truncated = truncated)
     }
 
     private fun getOrCreateRoom(rawText: String, scrapingRunId: Long): Room {
@@ -1285,6 +1370,20 @@ open class TubafScrapingService(
                 val stdg = queryParams["stdg"] ?: code
                 val stdgName = queryParams["stdg1"] ?: displayName
 
+                // Debug-Ausgabe für potentielle Encoding-Probleme (z.B. BGÖK -> BG�K)
+                if (stdg.contains('\uFFFD') || stdgName.contains('\uFFFD') || stdg.any { it.code > 127 }) {
+                    logger.warn(
+                        "⚠️ Studiengang Encoding Verdacht: rawHref='{}' stdg='{}' stdgName='{}' stdgHex={} stdgCP={} stdgNameHex={} stdgNameCP={}",
+                        href.take(160),
+                        stdg,
+                        stdgName,
+                        stdg.toByteArray(StandardCharsets.UTF_8).joinToString(" ") { b -> "%02X".format(b) },
+                        stdg.codePoints().toArray().joinToString(",") { "U+" + it.toString(16).uppercase() },
+                        stdgName.toByteArray(StandardCharsets.UTF_8).joinToString(" ") { b -> "%02X".format(b) },
+                        stdgName.codePoints().toArray().joinToString(",") { "U+" + it.toString(16).uppercase() },
+                    )
+                }
+
                 programs +=
                     StudyProgramOption(
                         code = stdg,
@@ -1301,7 +1400,10 @@ open class TubafScrapingService(
             return programs
         }
 
-        fun openProgram(program: StudyProgramOption): Document = request("GET", program.href, referer = url("verz.html"))
+        fun openProgram(program: StudyProgramOption): Document {
+            // Absicherung bei Nicht-ASCII Zeichen im Code (z.B. Ö) – href kommt bereits von der Seite.
+            return request("GET", program.href, referer = url("verz.html"))
+        }
 
         fun openProgramSemester(program: StudyProgramOption, fachSemester: String): Document {
             val formData = mapOf(
@@ -1310,7 +1412,20 @@ open class TubafScrapingService(
                 "semest" to fachSemester,
                 "popup3" to "",
             )
-            return request("POST", "stgvrz.html", formData, referer = url("stgvrz.html?stdg=${program.code}"))
+            // Baue Referer konservativ mit URLEncoder – logge zur Diagnose die verwendeten Werte
+            val encodedCode = java.net.URLEncoder.encode(program.code, StandardCharsets.UTF_8)
+            val refererUrl = url("stgvrz.html?stdg=$encodedCode")
+            if (program.code.contains('\uFFFD') || program.code.any { it.code > 127 }) {
+                logger.warn(
+                    "🔎 POST openProgramSemester Encoding Check: code='{}' encoded='{}' codeCP={} display='{}' displayCP={}",
+                    program.code,
+                    encodedCode,
+                    program.code.codePoints().toArray().joinToString(",") { "U+" + it.toString(16).uppercase() },
+                    program.displayName,
+                    program.displayName.codePoints().toArray().joinToString(",") { "U+" + it.toString(16).uppercase() },
+                )
+            }
+            return request("POST", "stgvrz.html", formData, referer = refererUrl)
         }
 
         private fun request(method: String, path: String, formData: Map<String, String>? = null, referer: String? = null): Document {
@@ -1363,14 +1478,63 @@ open class TubafScrapingService(
     private fun parseQueryParameters(href: String): Map<String, String> {
         val query = href.substringAfter('?', "")
         if (query.isBlank()) return emptyMap()
-
-        return query.split('&')
+        val raw = query.split('&')
             .mapNotNull { pair ->
                 if (!pair.contains('=')) return@mapNotNull null
                 val (key, value) = pair.split('=', limit = 2)
                 key to URLDecoder.decode(value, StandardCharsets.UTF_8)
+            }.toMap()
+        if (!enableLegacyEncodingFix) return raw
+        // Reparatur nur, wenn überhaupt ein Replacement Character oder typische Fehlsequenzen vorkommen.
+        return raw.mapValues { (k, v) ->
+            maybeRepairUmlauts(v).also { repaired ->
+                if (repaired != v) {
+                    logger.warn("🔧 Encoding-Fix angewendet (param={}): '{}' -> '{}'", k, v, repaired)
+                }
             }
-            .toMap()
+        }
+    }
+
+    private fun maybeRepairUmlauts(input: String): String {
+        if (input.isEmpty()) return input
+        // Falls Replacement Character vorhanden, versuchen wir heuristische Reparatur.
+        var value = input
+        val suspicious = value.contains('\uFFFD') || value.contains("Ã")
+        if (!suspicious) return value
+
+        // Schritt 1: Spezifische häufige UTF-8-doppelt-decoding Artefakte ersetzen.
+        val map = mapOf(
+            "Ã„" to "Ä",
+            "Ã–" to "Ö",
+            "Ãœ" to "Ü",
+            "Ã¤" to "ä",
+            "Ã¶" to "ö",
+            "Ã¼" to "ü",
+            "ÃŸ" to "ß",
+        )
+        for ((bad, good) in map) {
+            if (value.contains(bad)) value = value.replace(bad, good)
+        }
+
+        // Schritt 2: Falls weiterhin Replacement Characters existieren → Versuch Reinterpretation (ISO-8859-1 Bytes als UTF-8 lesen)
+        if (value.contains('\uFFFD')) {
+            // Wir versuchen eine Roundtrip-Heuristik nur wenn ursprünglicher String ASCII + Replacement war
+            val asciiLike = input.all { it.code < 128 || it == '\uFFFD' }
+            if (asciiLike) {
+                // Reinterpretiere ursprüngliche Bytes (so wie sie jetzt im JVM String gespeichert sind) als ISO-8859-1
+                // Das ist eine grobe Heuristik – wenn dadurch mehr gültige Umlaute entstehen, übernehmen.
+                val bytes = input.toByteArray(StandardCharsets.ISO_8859_1)
+                val candidate = String(bytes, StandardCharsets.UTF_8)
+                val gain =
+                    candidate.count {
+                        it in setOf('Ä', 'Ö', 'Ü', 'ä', 'ö', 'ü', 'ß')
+                    } - input.count { it in setOf('Ä', 'Ö', 'Ü', 'ä', 'ö', 'ü', 'ß') }
+                if (gain > 0 && !candidate.contains('\uFFFD')) {
+                    value = candidate
+                }
+            }
+        }
+        return value
     }
 
     private data class SemesterOption(val displayName: String)

@@ -6,14 +6,14 @@ import org.junit.jupiter.api.Test
 class LecturerSanitizerTest {
 
     // Re-implement parsing logic consistent with parseLecturerIdentity for unit validation.
-    private data class Parsed(val name: String, val email: String?, val truncated: Boolean)
+    private data class Parsed(val name: String, val email: String?, val title: String?, val truncated: Boolean)
 
     private fun parse(raw: String): Parsed {
-        val original = raw
         var value = raw.trim()
         var email: String? = null
+        var title: String? = null
         var truncated = false
-        if (value.isBlank()) return Parsed("N.N.", null, false)
+        if (value.isBlank()) return Parsed("N.N.", null, null, false)
         value = Regex("\\s+").replace(value.replace('\n', ' ').replace('\r', ' '), " ")
         val emailRegex = Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE)
         val m = emailRegex.find(value)
@@ -22,6 +22,30 @@ class LecturerSanitizerTest {
             val before = value.substring(0, m.range.first)
             val after = value.substring(m.range.last + 1)
             value = (before + after).replace("<", " ").replace(">", " ").replace("(", " ").replace(")", " ").trim()
+        }
+        // Title extraction heuristics (must mirror production roughly)
+        run {
+            val tokens = mutableListOf<String>()
+            var remaining = value.trimStart()
+            var progressed = true
+            val known = setOf("prof", "prof.", "dr", "dr.", "dipl.-ing.", "dipl.-ing", "msc", "bsc", "mag", "mag.", "pd", "apl", "apl.")
+            while (progressed) {
+                progressed = false
+                val match = Regex("^(?:(?:[A-Za-zÄÖÜäöü]{1,8}\\.)|(?:[A-Za-zÄÖÜäöü]{2,15}))(?=\\s|$)").find(remaining)
+                if (match != null) {
+                    val token = match.value
+                    val norm = token.lowercase()
+                    if (norm in known || (norm.endsWith('.') && norm.dropLast(1).all { it.isLetter() } && norm.length <= 6)) {
+                        tokens += token.trimEnd(',')
+                        remaining = remaining.substring(match.range.last + 1).trimStart()
+                        progressed = true
+                    }
+                }
+            }
+            if (tokens.isNotEmpty()) {
+                title = tokens.joinToString(" ").take(50)
+                value = remaining
+            }
         }
         value = value.trim { it == '-' || it == ';' || it == ',' || it.isWhitespace() }
         if (value.length > 200) {
@@ -41,7 +65,7 @@ class LecturerSanitizerTest {
             truncated = true
         }
         if (value.isBlank()) value = "N.N."
-        return Parsed(value, email?.take(150), truncated)
+        return Parsed(value, email?.take(150), title, truncated)
     }
 
     @Test
@@ -50,7 +74,9 @@ class LecturerSanitizerTest {
         assertTrue(longName.length > 200)
         val parsed = parse(longName)
         assertTrue(parsed.name.length <= 200)
-        assertTrue(parsed.name.startsWith("Prof. Dr. Max Mustermann"))
+        // Titel wurden extrahiert => reiner Name ohne Titel
+        assertEquals("Max Mustermann", parsed.name)
+        assertEquals("Prof. Dr.", parsed.title)
     }
 
     @Test
@@ -64,8 +90,9 @@ class LecturerSanitizerTest {
     fun `email extracted and removed from name`() {
         val input = "Dr. Alice Example <alice@example.org>"
         val parsed = parse(input)
-        assertEquals("dr. alice example", parsed.name.lowercase())
+        assertEquals("alice example", parsed.name.lowercase())
         assertEquals("alice@example.org", parsed.email)
+        assertEquals("Dr.", parsed.title)
     }
 
     @Test
@@ -73,5 +100,14 @@ class LecturerSanitizerTest {
         val parsed = parse("   \n   ")
         assertEquals("N.N.", parsed.name)
         assertNull(parsed.email)
+    }
+
+    @Test
+    fun `titles extracted and concatenated`() {
+        val input = "Prof. Dr. Max Mustermann <max@example.org>"
+        val parsed = parse(input)
+        assertEquals("Max Mustermann", parsed.name)
+        assertEquals("Prof. Dr.", parsed.title)
+        assertEquals("max@example.org", parsed.email)
     }
 }
