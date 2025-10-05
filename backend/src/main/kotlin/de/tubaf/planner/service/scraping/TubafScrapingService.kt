@@ -1107,8 +1107,19 @@ open class TubafScrapingService(
 
         val (building, number) = parseRoomCode(value)
         val room = Room(code = value, building = building, roomNumber = number)
-        val saved = roomRepository.save(room)
-        changeTrackingService.logEntityCreated(scrapingRunId, "Room", saved.id!!)
+
+        var created = true
+        val saved = try {
+            roomRepository.save(room)
+        } catch (ex: org.springframework.dao.DataIntegrityViolationException) {
+            logger.debug("Room with code {} already persisted concurrently: {}", value, ex.message)
+            created = false
+            roomRepository.findByCode(value) ?: throw ex
+        }
+
+        if (created) {
+            changeTrackingService.logEntityCreated(scrapingRunId, "Room", saved.id!!)
+        }
         return saved
     }
 
