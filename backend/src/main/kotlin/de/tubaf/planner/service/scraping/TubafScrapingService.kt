@@ -28,6 +28,7 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -911,9 +912,15 @@ open class TubafScrapingService(
         courseTypeRepository.findByCode(code)?.let { return it }
 
         val newType = CourseType(code = code, name = typeText.ifBlank { code })
-        val saved = courseTypeRepository.save(newType)
-        changeTrackingService.logEntityCreated(scrapingRunId, "CourseType", saved.id!!)
-        return saved
+        return try {
+            val saved = courseTypeRepository.save(newType)
+            changeTrackingService.logEntityCreated(scrapingRunId, "CourseType", saved.id!!)
+            saved
+        } catch (ex: DataIntegrityViolationException) {
+            logger.debug("Parallel creation race for course type {}", code, ex)
+            courseTypeRepository.findByCode(code)
+                ?: throw ex
+        }
     }
 
     private fun getOrCreateLecturer(rawText: String, scrapingRunId: Long): Lecturer {
