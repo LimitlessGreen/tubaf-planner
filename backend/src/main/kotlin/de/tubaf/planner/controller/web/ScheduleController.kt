@@ -1,10 +1,12 @@
 package de.tubaf.planner.controller.web
 
+import de.tubaf.planner.model.ScheduleEntry
 import de.tubaf.planner.service.*
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.*
 import java.time.DayOfWeek
+import java.time.LocalTime
 
 @Controller
 @RequestMapping("/schedule")
@@ -23,27 +25,62 @@ class ScheduleController(
     }
 
     @GetMapping("/semester/{semesterId}")
-    fun semesterSchedule(@PathVariable semesterId: Long, @RequestParam(required = false) studyProgramId: Long?, model: Model): String {
+    fun semesterSchedule(
+        @PathVariable semesterId: Long,
+        @RequestParam(required = false) studyProgramId: Long?,
+        @RequestParam(required = false) courseType: String?,
+        @RequestParam(required = false) daysOfWeek: List<String>?,
+        @RequestParam(required = false) timeFrom: String?,
+        @RequestParam(required = false) timeTo: String?,
+        model: Model,
+    ): String {
         val semester =
             semesterService.getAllSemesters().find { it.id == semesterId }
                 ?: return "redirect:/schedule"
 
-        val scheduleEntries =
-            if (studyProgramId != null) {
-                scheduleService.getScheduleForStudyProgram(studyProgramId, semesterId)
+        val availableStudyPrograms = studyProgramService.getActiveStudyPrograms()
+        val studyProgram = studyProgramId?.let { id -> availableStudyPrograms.find { it.id == id } }
+        val baseEntries =
+            if (studyProgram != null) {
+                scheduleService.getScheduleForStudyProgram(studyProgram.id!!, semesterId)
             } else {
                 scheduleService.getScheduleForSemester(semesterId)
             }
 
-        // Gruppiere nach Wochentag für Tabellenansicht
-        val scheduleByDay = scheduleEntries.groupBy { it.dayOfWeek }
-        val sortedDays = DayOfWeek.entries
+        val selectedDays = daysOfWeek?.mapNotNull { runCatching { DayOfWeek.valueOf(it) }.getOrNull() }?.toSet()
+        val fromTime = parseTime(timeFrom)
+        val toTime = parseTime(timeTo)
+
+        val filteredEntries =
+            baseEntries.filter { entry ->
+                val matchesCourseType = courseType.isNullOrBlank() || entry.course.courseType.code.equals(courseType, true)
+                val matchesDay = selectedDays.isNullOrEmpty() || selectedDays.contains(entry.dayOfWeek)
+                val startTime = normalizeTime(entry.startTime)
+                val endTime = normalizeTime(entry.endTime)
+                val matchesFrom = fromTime == null || !startTime.isBefore(fromTime)
+                val matchesTo = toTime == null || !endTime.isAfter(toTime)
+
+                matchesCourseType && matchesDay && matchesFrom && matchesTo
+            }
+
+        val sortedEntries =
+            filteredEntries.sortedWith(compareBy<ScheduleEntry> { it.dayOfWeek.value }.thenBy { it.startTime }.thenBy { it.course.name })
+
+        val timeSlots = buildTimeSlots(sortedEntries)
+        val scheduleGrid = buildScheduleGrid(sortedEntries)
+        val conflictingEntryIds = findConflictingEntryIds(sortedEntries)
+        val scheduleStats = calculateScheduleStats(sortedEntries, conflictingEntryIds)
 
         model.addAttribute("semester", semester)
-        model.addAttribute("scheduleByDay", scheduleByDay)
-        model.addAttribute("sortedDays", sortedDays)
-        model.addAttribute("studyPrograms", studyProgramService.getActiveStudyPrograms())
+        model.addAttribute("studyProgram", studyProgram)
         model.addAttribute("selectedStudyProgram", studyProgramId)
+        model.addAttribute("availableStudyPrograms", availableStudyPrograms)
+        model.addAttribute("scheduleEntries", sortedEntries)
+        model.addAttribute("timeSlots", timeSlots)
+        model.addAttribute("scheduleGrid", scheduleGrid)
+        model.addAttribute("scheduleStats", scheduleStats)
+        model.addAttribute("conflictingEntryIds", conflictingEntryIds)
+        model.addAttribute("studyProgramNotFound", studyProgramId != null && studyProgram == null)
 
         return "schedule/semester"
     }
@@ -107,3 +144,66 @@ class ScheduleController(
         return "schedule/lecturer"
     }
 }
+
+private fun parseTime(value: String?): LocalTime? = value
+    ?.takeIf { it.isNotBlank() }
+    ?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
+    ?.let { normalizeTime(it) }
+
+private fun normalizeTime(time: LocalTime): LocalTime = time.withSecond(0).withNano(0)
+
+private fun buildTimeSlots(entries: List<ScheduleEntry>): List<LocalTime> {
+    val defaultSlots =
+        generateSequence(LocalTime.of(7, 30)) { it.plusMinutes(30) }
+            .takeWhile { it <= LocalTime.of(19, 30) }
+            .map { normalizeTime(it) }
+            .toMutableSet()
+
+    entries.map { normalizeTime(it.startTime) }.forEach { defaultSlots.add(it) }
+
+    return defaultSlots.toList().sorted()
+}
+
+private fun buildScheduleGrid(entries: List<ScheduleEntry>): Map<String, List<ScheduleEntry>> {
+    val grid = mutableMapOf<String, MutableList<ScheduleEntry>>()
+
+    entries.forEach { entry ->
+        val key = "${entry.dayOfWeek.value}-${normalizeTime(entry.startTime)}"
+        grid.computeIfAbsent(key) { mutableListOf() }.add(entry)
+    }
+
+    return grid
+}
+
+private fun findConflictingEntryIds(entries: List<ScheduleEntry>): Set<Long> {
+    val conflictingIds = mutableSetOf<Long>()
+
+    for (i in entries.indices) {
+        for (j in i + 1 until entries.size) {
+            val first = entries[i]
+            val second = entries[j]
+
+            if (first.overlaps(second)) {
+                first.id?.let { conflictingIds.add(it) }
+                second.id?.let { conflictingIds.add(it) }
+            }
+        }
+    }
+
+    return conflictingIds
+}
+
+private fun calculateScheduleStats(entries: List<ScheduleEntry>, conflictingEntryIds: Set<Long>): ScheduleStats {
+    val totalEntries = entries.size
+    val totalCourses = entries.mapNotNull { it.course.id }.toSet().size
+    val totalHours = entries.sumOf { it.duration } / 60.0
+
+    return ScheduleStats(
+        totalEntries = totalEntries,
+        totalCourses = totalCourses,
+        conflicts = conflictingEntryIds.size,
+        totalHours = totalHours,
+    )
+}
+
+data class ScheduleStats(val totalEntries: Int, val totalCourses: Int, val conflicts: Int, val totalHours: Double)
