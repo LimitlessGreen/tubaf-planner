@@ -592,14 +592,30 @@
         async function cancelScraping() {
             try {
                 const response = await fetch('/api/scraping/cancel', { method: 'POST' });
-                const data = await response.json();
-                addLog('warning', 'Scraping wurde abgebrochen');
-                showNotification('Scraping wurde abgebrochen', 'warning');
+                let data = {};
+
+                try {
+                    data = await response.json();
+                } catch (_) {
+                    // ignore JSON parse errors and fall back to defaults
+                }
+
+                if (!response.ok || data.success === false) {
+                    const message = data.message || 'Abbrechen fehlgeschlagen';
+                    throw new Error(message);
+                }
+
+                const message = data.message || 'Scraping wurde abgebrochen';
+                addLog('warning', message);
+                showNotification(message, 'warning');
                 stopElapsedTimer();
                 stopAutoRefresh();
+                updateUI('idle');
+                await refreshStatus();
             } catch (error) {
                 console.error('Error:', error);
-                addLog('error', 'Fehler beim Abbrechen');
+                addLog('error', 'Fehler beim Abbrechen: ' + error.message);
+                showNotification('Fehler beim Abbrechen: ' + error.message, 'error');
             }
         }
         
@@ -609,7 +625,9 @@
                 const response = await fetch('/api/scraping/status');
                 const data = await response.json();
                 
-                updateStatusIndicator(data.status || 'idle');
+                const status = (data.status || 'idle').toLowerCase();
+                updateStatusIndicator(status);
+                updateUI(status === 'running' ? 'running' : 'idle');
                 updateProgress(data);
                 
                 if (data.logs && data.logs.length > 0) {
@@ -618,7 +636,7 @@
                     });
                 }
                 
-                if (data.status !== 'running') {
+                if (status !== 'running') {
                     stopElapsedTimer();
                     stopAutoRefresh();
                 }

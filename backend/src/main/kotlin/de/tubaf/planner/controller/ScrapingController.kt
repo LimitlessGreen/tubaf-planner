@@ -295,22 +295,32 @@ class ScrapingController(
 
     @PostMapping("/cancel")
     @Operation(summary = "Cancel running scraping job")
-    fun cancelScraping(): ResponseEntity<Map<String, Any>> {
+    fun cancelScraping(@RequestBody(required = false) request: CancelScrapeRequest?): ResponseEntity<Map<String, Any>> {
         logger.info("Cancellation requested - interrupting scraping thread")
 
         return try {
-            // TODO: Implement proper cancellation mechanism in TubafScrapingService
-            // Currently relying on Thread.interrupt() mechanism
+            if (!tubafScrapingService.isJobRunning()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                    mapOf(
+                        "success" to false,
+                        "message" to "Es läuft derzeit kein Scraping-Prozess",
+                    ),
+                )
+            }
+
+            val message = request?.message?.takeIf { it.isNotBlank() } ?: "Scraping wurde abgebrochen"
+            tubafScrapingService.stopScraping(message)
+
             ResponseEntity.ok(
-                mapOf<String, Any>(
-                    "success" to false,
-                    "message" to "Cancellation noch nicht implementiert - bitte Backend erweitern",
+                mapOf(
+                    "success" to true,
+                    "message" to message,
                 ),
             )
         } catch (e: Exception) {
             logger.error("Error cancelling scraping", e)
             ResponseEntity.internalServerError().body(
-                mapOf<String, Any>("success" to false, "message" to (e.message ?: "Unbekannter Fehler")),
+                mapOf("success" to false, "message" to (e.message ?: "Unbekannter Fehler")),
             )
         }
     }
@@ -386,3 +396,5 @@ class ScrapingController(
 data class SemesterScrapeRequest(val semesterIdentifiers: List<String> = emptyList())
 
 data class RemoteScrapeRequest(val semesters: List<String> = emptyList())
+
+data class CancelScrapeRequest(val message: String? = null)
