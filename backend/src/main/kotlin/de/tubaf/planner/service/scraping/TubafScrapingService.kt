@@ -267,7 +267,7 @@ open class TubafScrapingService(
                 )
                 progressTracker.log("INFO", "Scraping ${option.displayName}")
                 val subId = "sem-$index"
-                progressTracker.startSubTask(subId, total = 100)
+                progressTracker.startSubTask(subId, total = 0)
 
                 session.selectSemester(option)
                 val semester = getOrCreateSemester(option)
@@ -276,6 +276,7 @@ open class TubafScrapingService(
                         session,
                         semester,
                         trackProgress = false,
+                        subTaskId = subId,
                     )
                 results += semesterResult
 
@@ -369,8 +370,14 @@ open class TubafScrapingService(
                 session.selectSemester(option)
                 val semester = getOrCreateSemester(option)
                 val subId = "sem-$index"
-                progressTracker.startSubTask(subId, 100)
-                val result = scrapeSemesterDataWithSession(session, semester, trackProgress = false)
+                progressTracker.startSubTask(subId, total = 0)
+                val result =
+                    scrapeSemesterDataWithSession(
+                        session,
+                        semester,
+                        trackProgress = false,
+                        subTaskId = subId,
+                    )
                 results += result
 
                 progressTracker.updateSubTask(
@@ -398,14 +405,20 @@ open class TubafScrapingService(
         // Eigenen SubTask für Einzel-Semester anlegen
         progressTracker.reset("Einzel-Semester Scrape")
         progressTracker.initSubTasks(listOf("sem-0"), listOf(semester.name))
-        progressTracker.startSubTask("sem-0", total = 100)
+        progressTracker.startSubTask("sem-0", total = 0)
 
         val session = TubafScraperSession()
         val semesterOption = session.fetchSemesterOptions().find { matchesSemesterOption(it, semester) }
             ?: throw IllegalArgumentException("Semester '${semester.name}' wurde auf der TUBAF-Seite nicht gefunden")
 
         session.selectSemester(semesterOption)
-        val result = scrapeSemesterDataWithSession(session, semester, trackProgress = true)
+        val result =
+            scrapeSemesterDataWithSession(
+                session,
+                semester,
+                trackProgress = true,
+                subTaskId = "sem-0",
+            )
         progressTracker.updateSubTask(
             "sem-0",
             processed = 100,
@@ -415,7 +428,12 @@ open class TubafScrapingService(
         return result
     }
 
-    private fun scrapeSemesterDataWithSession(session: TubafScraperSession, semester: Semester, trackProgress: Boolean): ScrapingResult {
+    private fun scrapeSemesterDataWithSession(
+        session: TubafScraperSession,
+        semester: Semester,
+        trackProgress: Boolean,
+        subTaskId: String? = null,
+    ): ScrapingResult {
         val scrapingRun = changeTrackingService.startScrapingRun(semester.id!!, baseUrl)
         val stats = ScrapeStats()
         return try {
@@ -438,6 +456,15 @@ open class TubafScrapingService(
                                 )
                         },
                         message = "Starte ${if (scrapingConfiguration.parallelEnabled) "paralleles " else ""}Scraping für ${semester.name}",
+                    )
+                }
+
+                if (!trackProgress && subTaskId != null) {
+                    progressTracker.updateSubTask(
+                        id = subTaskId,
+                        processed = 0,
+                        total = programs.size,
+                        message = "${programs.size} Studiengänge gefunden",
                     )
                 }
 
@@ -466,6 +493,14 @@ open class TubafScrapingService(
                         if (trackProgress) {
                             progressTracker.update(
                                 task = semester.shortName + ": " + program.code,
+                                processed = index + 1,
+                                total = programs.size,
+                                message = msg,
+                            )
+                        }
+                        if (subTaskId != null) {
+                            progressTracker.updateSubTask(
+                                id = subTaskId,
                                 processed = index + 1,
                                 total = programs.size,
                                 message = msg,
@@ -1746,10 +1781,13 @@ private class ScrapingProgressTracker {
         }
     }
 
-    fun updateSubTask(id: String, processed: Int, message: String? = null) {
+    fun updateSubTask(id: String, processed: Int, total: Int? = null, message: String? = null) {
         synchronized(lock) {
             val st = subTaskMap[id] ?: return
             st.processed = processed
+            if (total != null) {
+                st.total = total
+            }
             st.progress = computeProgress(st.processed, st.total)
             if (message != null) st.message = message
             updateAggregatedProgressLocked()
