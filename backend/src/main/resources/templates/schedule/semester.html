@@ -33,12 +33,17 @@
                 </div>
             </div>
 
+            <div th:if="${studyProgramNotFound}" class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Der ausgewählte Studiengang konnte nicht gefunden werden. Es wird der vollständige Stundenplan des Semesters angezeigt.
+            </div>
+
             <!-- Quick Stats -->
             <div class="row mb-4" th:if="${scheduleStats}">
                 <div class="col-md-3 mb-2">
                     <div class="card border-primary">
                         <div class="card-body text-center py-2">
-                            <h6 class="text-primary mb-1" th:text="${scheduleStats.totalEntries ?: '0'}">0</h6>
+                            <h6 class="text-primary mb-1" th:text="${scheduleStats.totalEntries}">0</h6>
                             <small class="text-muted">Termine</small>
                         </div>
                     </div>
@@ -46,7 +51,7 @@
                 <div class="col-md-3 mb-2">
                     <div class="card border-success">
                         <div class="card-body text-center py-2">
-                            <h6 class="text-success mb-1" th:text="${scheduleStats.totalCourses ?: '0'}">0</h6>
+                            <h6 class="text-success mb-1" th:text="${scheduleStats.totalCourses}">0</h6>
                             <small class="text-muted">Kurse</small>
                         </div>
                     </div>
@@ -54,7 +59,7 @@
                 <div class="col-md-3 mb-2">
                     <div class="card border-warning">
                         <div class="card-body text-center py-2">
-                            <h6 class="text-warning mb-1" th:text="${scheduleStats.conflicts ?: '0'}">0</h6>
+                            <h6 class="text-warning mb-1" th:text="${scheduleStats.conflicts}">0</h6>
                             <small class="text-muted">Konflikte</small>
                         </div>
                     </div>
@@ -62,7 +67,7 @@
                 <div class="col-md-3 mb-2">
                     <div class="card border-info">
                         <div class="card-body text-center py-2">
-                            <h6 class="text-info mb-1" th:text="${scheduleStats.totalHours ?: '0'}">0</h6>
+                            <h6 class="text-info mb-1" th:text="${#numbers.formatDecimal(scheduleStats.totalHours, 1, 1)}">0</h6>
                             <small class="text-muted">SWS</small>
                         </div>
                     </div>
@@ -114,28 +119,32 @@
                                                 <td th:each="day : ${T(java.time.DayOfWeek).values()}" 
                                                     class="p-1 align-top" style="min-height: 80px;">
                                                     
-                                                    <div th:each="entry : ${scheduleGrid[day.value + '-' + timeSlot]}" 
+                                                    <div th:each="entry : ${scheduleGrid[day.value + '-' + timeSlot]}"
                                                          class="schedule-entry mb-1"
-                                                         th:class="'schedule-entry mb-1 course-type-' + ${entry.course.courseType?.toLowerCase() ?: 'default'}"
-                                                         th:title="${entry.course.name + ' (' + entry.course.courseCode + ')'}"
+                                                         th:class="'schedule-entry mb-1 course-type-' + ${#strings.toLowerCase(entry.course.courseType.code ?: 'default')}"
+                                                         th:title="${entry.course.name + ' (' + #strings.defaultString(entry.course.courseNumber, entry.course.courseType.code) + ')'}"
                                                          style="font-size: 0.75rem; cursor: pointer;"
-                                                         th:onclick="'showEntryDetails(' + ${entry.id} + ')'">
-                                                        
-                                                        <div class="fw-bold" th:text="${entry.course.courseCode}">CODE</div>
-                                                        <div th:text="${entry.course.name}" 
+                                                         th:onclick="|showEntryDetails(${entry.id})|">
+
+                                                        <div class="fw-bold" th:text="${entry.course.courseNumber ?: entry.course.courseType.code}">CODE</div>
+                                                        <div th:text="${entry.course.name}"
                                                              style="line-height: 1.1; max-height: 2.2em; overflow: hidden;">Course Name</div>
                                                         <small class="text-muted">
-                                                            <i class="fas fa-map-marker-alt me-1" th:if="${entry.room}"></i>
-                                                            <span th:if="${entry.room}" th:text="${entry.room.name}">Room</span>
-                                                            <br th:if="${entry.instructor}">
-                                                            <i class="fas fa-user me-1" th:if="${entry.instructor}"></i>
-                                                            <span th:if="${entry.instructor}" th:text="${entry.instructor}">Instructor</span>
+                                                            <span>
+                                                                <i class="fas fa-map-marker-alt me-1"></i>
+                                                                <span th:text="${entry.room != null ? entry.room.code : 'Nicht zugewiesen'}">Room</span>
+                                                            </span>
+                                                            <br>
+                                                            <span>
+                                                                <i class="fas fa-user me-1"></i>
+                                                                <span th:text="${entry.course?.lecturer != null ? entry.course.lecturer.name : 'Nicht zugeordnet'}">Instructor</span>
+                                                            </span>
                                                         </small>
-                                                        
+
                                                         <!-- Conflict indicator -->
-                                                        <div th:if="${entry.hasConflicts}" 
+                                                        <div th:if="${conflictingEntryIds.contains(entry.id)}"
                                                              class="position-absolute top-0 end-0">
-                                                            <i class="fas fa-exclamation-triangle text-danger" 
+                                                            <i class="fas fa-exclamation-triangle text-danger"
                                                                title="Konflikt erkannt"></i>
                                                         </div>
                                                     </div>
@@ -164,34 +173,32 @@
                                         <tbody>
                                             <tr th:each="entry : ${scheduleEntries}">
                                                 <td>
-                                                    <strong th:text="${entry.course.courseCode}">CODE</strong><br>
+                                                    <strong th:text="${entry.course.courseNumber ?: entry.course.courseType.code}">CODE</strong><br>
                                                     <small th:text="${entry.course.name}">Course Name</small>
                                                 </td>
                                                 <td>
                                                     <span class="badge"
-                                                          th:class="'badge bg-' + (${entry.course.courseType} == 'V' ? 'primary' : 
-                                                                                    ${entry.course.courseType} == 'U' ? 'warning' : 
-                                                                                    ${entry.course.courseType} == 'P' ? 'info' : 
-                                                                                    ${entry.course.courseType} == 'S' ? 'success' : 'secondary')"
-                                                          th:text="${entry.course.courseType}">Type</span>
+                                                          th:class="${'badge bg-' + (#strings.equalsIgnoreCase(entry.course.courseType.code, 'V') ? 'primary' :
+                                                                                    (#strings.equalsIgnoreCase(entry.course.courseType.code, 'U') ? 'warning' :
+                                                                                    (#strings.equalsIgnoreCase(entry.course.courseType.code, 'P') ? 'info' :
+                                                                                    (#strings.equalsIgnoreCase(entry.course.courseType.code, 'S') ? 'success' : 'secondary'))))}"
+                                                          th:text="${entry.course.courseType.code}">Type</span>
                                                 </td>
                                                 <td>
                                                     <div th:text="${#messages.msg('dayOfWeek.' + entry.dayOfWeek.name().toLowerCase())}">Day</div>
                                                     <small th:text="${#temporals.format(entry.startTime, 'HH:mm') + ' - ' + #temporals.format(entry.endTime, 'HH:mm')}">Time</small>
                                                 </td>
                                                 <td>
-                                                    <span th:if="${entry.room}" th:text="${entry.room.name}">Room</span>
-                                                    <span th:unless="${entry.room}" class="text-muted">Nicht zugewiesen</span>
+                                                    <span th:text="${entry.room != null ? entry.room.code : 'Nicht zugewiesen'}">Room</span>
                                                 </td>
                                                 <td>
-                                                    <span th:if="${entry.instructor}" th:text="${entry.instructor}">Instructor</span>
-                                                    <span th:unless="${entry.instructor}" class="text-muted">Nicht zugeordnet</span>
+                                                    <span th:text="${entry.course?.lecturer != null ? entry.course.lecturer.name : 'Nicht zugeordnet'}">Instructor</span>
                                                 </td>
                                                 <td>
-                                                    <span th:if="${entry.hasConflicts}" class="badge bg-danger">
+                                                    <span th:if="${conflictingEntryIds.contains(entry.id)}" class="badge bg-danger">
                                                         <i class="fas fa-exclamation-triangle me-1"></i>Konflikt
                                                     </span>
-                                                    <span th:unless="${entry.hasConflicts}" class="badge bg-success">
+                                                    <span th:unless="${conflictingEntryIds.contains(entry.id)}" class="badge bg-success">
                                                         <i class="fas fa-check me-1"></i>OK
                                                     </span>
                                                 </td>
@@ -232,13 +239,13 @@
                                 <label for="studyProgramFilter" class="form-label">Studiengang</label>
                                 <select class="form-select" name="studyProgramId" id="studyProgramFilter">
                                     <option value="">Alle Studiengänge</option>
-                                    <option th:each="program : ${availableStudyPrograms}" 
-                                            th:value="${program.id}" 
+                                    <option th:each="program : ${availableStudyPrograms}"
+                                            th:value="${program.id}"
                                             th:text="${program.name}"
-                                            th:selected="${param.studyProgramId != null and param.studyProgramId[0] == program.id.toString()}">Program</option>
+                                            th:selected="${selectedStudyProgram != null and selectedStudyProgram == program.id}">Program</option>
                                 </select>
                             </div>
-                            
+
                             <div class="mb-3">
                                 <label for="courseTypeFilter" class="form-label">Kurstyp</label>
                                 <select class="form-select" name="courseType" id="courseTypeFilter">
@@ -255,27 +262,29 @@
                                 <div class="row">
                                     <div class="col-6" th:each="day : ${T(java.time.DayOfWeek).values()}">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" 
-                                                   th:id="'day' + ${day.value}" 
-                                                   name="daysOfWeek" 
+                                            <input class="form-check-input" type="checkbox"
+                                                   th:id="'day' + ${day.value}"
+                                                   name="daysOfWeek"
                                                    th:value="${day.name()}"
-                                                   checked>
-                                            <label class="form-check-label" 
+                                                   th:checked="${param.daysOfWeek == null or #lists.contains(param.daysOfWeek, day.name())}">
+                                            <label class="form-check-label"
                                                    th:for="'day' + ${day.value}"
                                                    th:text="${#messages.msg('dayOfWeek.' + day.name().toLowerCase())}">Day</label>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div class="row">
                                 <div class="col-6">
                                     <label for="timeFrom" class="form-label">Von</label>
-                                    <input type="time" class="form-control" name="timeFrom" id="timeFrom" value="07:30">
+                                    <input type="time" class="form-control" name="timeFrom" id="timeFrom"
+                                           th:value="${param.timeFrom ?: '07:30'}">
                                 </div>
                                 <div class="col-6">
                                     <label for="timeTo" class="form-label">Bis</label>
-                                    <input type="time" class="form-control" name="timeTo" id="timeTo" value="19:30">
+                                    <input type="time" class="form-control" name="timeTo" id="timeTo"
+                                           th:value="${param.timeTo ?: '19:30'}">
                                 </div>
                             </div>
                         </div>
