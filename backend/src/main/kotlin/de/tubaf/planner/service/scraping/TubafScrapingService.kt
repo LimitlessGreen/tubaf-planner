@@ -713,7 +713,7 @@ open class TubafScrapingService(
                                 }
 
                             val saved = scheduleEntryRepository.save(newEntry)
-                            courseWithEntries.scheduleEntries.add(saved)
+                            // Keine manuelle Collection-Manipulation nötig - bidirektionale Beziehung via course.scheduleEntries wird automatisch gepflegt
                             changeTrackingService.logEntityCreated(scrapingRunId, "ScheduleEntry", saved.id!!)
                             stats.newEntries += 1
                         }
@@ -731,10 +731,13 @@ open class TubafScrapingService(
                 ?: studyProgramRepository.findByNameContainingIgnoreCase(option.displayName).firstOrNull()
                 ?: return
 
-        val alreadyLinked = course.courseStudyPrograms.any { it.studyProgram.id == studyProgram.id }
+        // Lade Course mit allen Relations um sicherzustellen dass die Entity im Persistence Context ist
+        val managedCourse = courseRepository.findById(course.id!!).orElse(null) ?: return
+
+        val alreadyLinked = managedCourse.courseStudyPrograms.any { it.studyProgram.id == studyProgram.id }
         if (!alreadyLinked) {
-            course.addStudyProgram(studyProgram, parseFachSemesterNumber(fachSemester))
-            courseRepository.save(course)
+            managedCourse.addStudyProgram(studyProgram, parseFachSemesterNumber(fachSemester))
+            courseRepository.save(managedCourse)
         }
     }
 
