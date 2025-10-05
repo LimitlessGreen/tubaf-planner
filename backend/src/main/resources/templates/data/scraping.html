@@ -305,20 +305,30 @@
                             
                             <!-- Semester Selection Panel -->
                             <div id="semesterSelectionPanel" class="d-none">
-                                <label class="form-label fw-bold mt-3">
-                                    <i class="fas fa-calendar-alt me-1"></i>Verfügbare Semester
-                                </label>
-                                <select id="semesterSelect" class="form-select" multiple size="6">
-                                    <option disabled>Lade verfügbare Semester...</option>
-                                </select>
+                                <div class="d-flex justify-content-between align-items-center mt-3">
+                                    <label for="semesterSearch" class="form-label fw-bold mb-0">
+                                        <i class="fas fa-calendar-alt me-1"></i>Verfügbare Semester
+                                    </label>
+                                    <span id="semesterCountBadge" class="badge bg-light text-muted border">Kein Semester ausgewählt</span>
+                                </div>
+                                <div class="input-group input-group-sm mt-2">
+                                    <span class="input-group-text bg-white"><i class="fas fa-search"></i></span>
+                                    <input type="search" id="semesterSearch" class="form-control" placeholder="Semester suchen..." oninput="filterSemesters()">
+                                </div>
+                                <div class="border rounded mt-2" style="max-height: 220px; overflow-y: auto;">
+                                    <div id="semesterList" class="list-group list-group-flush">
+                                        <div class="list-group-item text-muted">Lade verfügbare Semester...</div>
+                                    </div>
+                                </div>
+                                <div id="selectedSemestersSummary" class="mt-2 d-flex flex-wrap gap-2 align-items-center small d-none"></div>
                                 <small class="text-muted d-block mt-2">
-                                    <i class="fas fa-info-circle me-1"></i>Mehrfachauswahl mit <kbd>Strg</kbd>/<kbd>⌘</kbd>
+                                    <i class="fas fa-info-circle me-1"></i>Nutze die Suche oder die Buttons, um Semester schnell zu verwalten.
                                 </small>
-                                <div class="mt-2">
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="selectAllSemesters()">
+                                <div class="mt-2 d-flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAllSemesters()">
                                         <i class="fas fa-check-double me-1"></i>Alle auswählen
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="deselectAllSemesters()">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllSemesters()">
                                         <i class="fas fa-times me-1"></i>Alle abwählen
                                     </button>
                                 </div>
@@ -506,6 +516,8 @@
         let startTime = null;
         let elapsedTimer = null;
         let latestLogTimestamp = null;
+        let availableSemesters = [];
+        const selectedSemesters = new Set();
         
         // Mode Selection
         function selectMode(mode) {
@@ -526,19 +538,21 @@
         
         // Semester selection helpers
         function selectAllSemesters() {
-            const select = document.getElementById('semesterSelect');
-            for (let i = 0; i < select.options.length; i++) {
-                if (!select.options[i].disabled) {
-                    select.options[i].selected = true;
-                }
-            }
+            const checkboxes = document.querySelectorAll('#semesterList input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = true;
+                selectedSemesters.add(cb.value);
+            });
+            updateSelectedState();
         }
-        
+
         function deselectAllSemesters() {
-            const select = document.getElementById('semesterSelect');
-            for (let i = 0; i < select.options.length; i++) {
-                select.options[i].selected = false;
-            }
+            const checkboxes = document.querySelectorAll('#semesterList input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = false;
+                selectedSemesters.delete(cb.value);
+            });
+            updateSelectedState();
         }
         
         // Start Scraping
@@ -552,8 +566,7 @@
                         endpoint = '/api/scraping/discover-and-scrape';
                         break;
                     case 'selection':
-                        const selected = Array.from(document.getElementById('semesterSelect').selectedOptions)
-                            .map(opt => opt.value);
+                        const selected = getSelectedSemesters();
                         if (selected.length === 0) {
                             showNotification('Bitte wähle mindestens ein Semester aus', 'warning');
                             return;
@@ -836,38 +849,162 @@
         
         // Load Available Semesters
         async function loadAvailableSemesters() {
-            const select = document.getElementById('semesterSelect');
-            if (!select) return;
-            
+            const list = document.getElementById('semesterList');
+            if (!list) return;
+
+            list.innerHTML = '<div class="list-group-item text-muted">Lade verfügbare Semester...</div>';
+
             try {
                 const response = await fetch('/api/scraping/available-semesters');
                 const data = await response.json();
-                
-                select.innerHTML = '';
-                if (!data || data.length === 0) {
-                    select.innerHTML = '<option disabled>Keine Semester gefunden</option>';
-                    return;
-                }
-                
-                data.forEach(sem => {
-                    const option = document.createElement('option');
-                    option.value = sem.displayName;
-                    option.textContent = sem.displayName;
-                    if (sem.shortName) {
-                        option.textContent += ` (${sem.shortName})`;
+
+                availableSemesters = Array.isArray(data) ? data : [];
+
+                // Remove selections that are no longer available
+                const validSelections = new Set();
+                availableSemesters.forEach(sem => {
+                    if (selectedSemesters.has(sem.displayName)) {
+                        validSelections.add(sem.displayName);
                     }
-                    select.appendChild(option);
                 });
+                selectedSemesters.clear();
+                validSelections.forEach(value => selectedSemesters.add(value));
+
+                const searchInput = document.getElementById('semesterSearch');
+                const term = searchInput ? searchInput.value : '';
+                applySemesterFilter(term);
             } catch (error) {
                 console.error('Error loading semesters:', error);
-                select.innerHTML = '<option disabled>Fehler beim Laden</option>';
+                list.innerHTML = '<div class="list-group-item text-danger">Fehler beim Laden</div>';
+                updateSelectedState();
             }
         }
-        
+
         // Refresh All
         function refreshAll() {
             refreshStatus();
             loadAvailableSemesters();
+        }
+
+        function getSelectedSemesters() {
+            if (!availableSemesters || availableSemesters.length === 0) {
+                return Array.from(selectedSemesters);
+            }
+            const ordered = [];
+            availableSemesters.forEach(sem => {
+                if (selectedSemesters.has(sem.displayName)) {
+                    ordered.push(sem.displayName);
+                }
+            });
+            return ordered;
+        }
+
+        function renderSemesterList(semesters) {
+            const list = document.getElementById('semesterList');
+            if (!list) return;
+
+            list.innerHTML = '';
+
+            if (!semesters || semesters.length === 0) {
+                const emptyItem = document.createElement('div');
+                emptyItem.className = 'list-group-item text-muted';
+                emptyItem.textContent = 'Keine Semester gefunden';
+                list.appendChild(emptyItem);
+                updateSelectedState();
+                return;
+            }
+
+            semesters.forEach((sem, index) => {
+                const item = document.createElement('div');
+                item.className = 'list-group-item list-group-item-action';
+
+                const checkboxId = `semester-option-${index}`;
+                const shortName = sem.shortName ? `<small class="text-muted d-block">${escapeHtml(sem.shortName)}</small>` : '';
+
+                item.innerHTML = `
+                    <div class="form-check align-items-start">
+                        <input class="form-check-input" type="checkbox" value="${escapeHtml(sem.displayName)}" id="${checkboxId}">
+                        <label class="form-check-label ms-2" for="${checkboxId}">
+                            <span class="fw-semibold">${escapeHtml(sem.displayName)}</span>
+                            ${shortName}
+                        </label>
+                    </div>
+                `;
+
+                const checkbox = item.querySelector('input');
+                checkbox.checked = selectedSemesters.has(sem.displayName);
+                checkbox.addEventListener('change', (event) => {
+                    if (event.target.checked) {
+                        selectedSemesters.add(event.target.value);
+                    } else {
+                        selectedSemesters.delete(event.target.value);
+                    }
+                    updateSelectedState();
+                });
+
+                list.appendChild(item);
+            });
+
+            updateSelectedState();
+        }
+
+        function updateSelectedState() {
+            const badge = document.getElementById('semesterCountBadge');
+            const summary = document.getElementById('selectedSemestersSummary');
+            const count = selectedSemesters.size;
+
+            if (badge) {
+                badge.textContent = count === 0
+                    ? 'Kein Semester ausgewählt'
+                    : `${count} Semester ausgewählt`;
+            }
+
+            if (summary) {
+                summary.innerHTML = '';
+
+                if (count === 0) {
+                    summary.classList.add('d-none');
+                } else {
+                    summary.classList.remove('d-none');
+                    const ordered = getSelectedSemesters();
+                    ordered.slice(0, 5).forEach(value => {
+                        const chip = document.createElement('span');
+                        chip.className = 'badge bg-light text-secondary border';
+                        chip.textContent = value;
+                        summary.appendChild(chip);
+                    });
+                    if (ordered.length > 5) {
+                        const more = document.createElement('span');
+                        more.className = 'badge bg-light text-secondary border';
+                        more.textContent = `+${ordered.length - 5} weitere`;
+                        summary.appendChild(more);
+                    }
+                }
+            }
+        }
+
+        function filterSemesters() {
+            const termInput = document.getElementById('semesterSearch');
+            if (!termInput) return;
+
+            const term = termInput.value.trim().toLowerCase();
+            applySemesterFilter(term);
+        }
+
+        function applySemesterFilter(term = '') {
+            const normalizedTerm = term.trim().toLowerCase();
+
+            if (!normalizedTerm) {
+                renderSemesterList(availableSemesters);
+                return;
+            }
+
+            const filtered = availableSemesters.filter(sem => {
+                const haystack = `${sem.displayName || ''} ${sem.shortName || ''}`.toLowerCase();
+                return haystack.includes(normalizedTerm);
+            });
+
+            renderSemesterList(filtered);
         }
         
         // Show Notification
