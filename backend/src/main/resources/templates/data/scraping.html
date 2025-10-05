@@ -505,6 +505,7 @@
         let refreshInterval = null;
         let startTime = null;
         let elapsedTimer = null;
+        let latestLogTimestamp = null;
         
         // Mode Selection
         function selectMode(mode) {
@@ -624,18 +625,37 @@
             try {
                 const response = await fetch('/api/scraping/status');
                 const data = await response.json();
-                
+
                 const status = (data.status || 'idle').toLowerCase();
                 updateStatusIndicator(status);
                 updateUI(status === 'running' ? 'running' : 'idle');
                 updateProgress(data);
-                
+
                 if (data.logs && data.logs.length > 0) {
-                    data.logs.slice(-10).forEach(log => {
-                        addLog(log.level.toLowerCase(), log.message, false);
+                    const recentLogs = data.logs.slice(-10);
+                    const newLogs = recentLogs.filter(log => {
+                        if (!log.timestamp) {
+                            return latestLogTimestamp === null;
+                        }
+                        const logTime = new Date(log.timestamp).getTime();
+                        return Number.isNaN(logTime) || latestLogTimestamp === null || logTime > latestLogTimestamp;
+                    });
+
+                    newLogs.forEach(log => {
+                        addLog(log.level.toLowerCase(), log.message, false, log.timestamp);
+
+                        let logTime = log.timestamp ? new Date(log.timestamp).getTime() : Date.now();
+                        if (Number.isNaN(logTime)) {
+                            logTime = Date.now();
+                        }
+                        if (!Number.isNaN(logTime)) {
+                            latestLogTimestamp = latestLogTimestamp === null
+                                ? logTime
+                                : Math.max(latestLogTimestamp, logTime);
+                        }
                     });
                 }
-                
+
                 if (status !== 'running') {
                     stopElapsedTimer();
                     stopAutoRefresh();
@@ -736,18 +756,21 @@
         }
         
         // Add Log Entry
-        function addLog(level, message, scroll = true) {
+        function addLog(level, message, scroll = true, timestamp = null) {
             const container = document.getElementById('logContainer');
-            
+
             // Remove empty state
             if (container.querySelector('.text-center')) {
                 container.innerHTML = '';
             }
-            
+
             const entry = document.createElement('div');
             entry.className = `log-entry ${level}`;
-            
-            const time = new Date().toLocaleTimeString('de-DE');
+
+            const parsedTimestamp = timestamp ? new Date(timestamp) : null;
+            const time = parsedTimestamp && !Number.isNaN(parsedTimestamp.getTime())
+                ? parsedTimestamp.toLocaleTimeString('de-DE')
+                : new Date().toLocaleTimeString('de-DE');
             entry.innerHTML = `
                 <div class="d-flex justify-content-between align-items-start">
                     <span class="flex-grow-1">${escapeHtml(message)}</span>
@@ -769,6 +792,7 @@
         
         // Clear Logs
         function clearLogs() {
+            latestLogTimestamp = null;
             document.getElementById('logContainer').innerHTML = `
                 <div class="text-center text-muted py-5">
                     <i class="fas fa-info-circle fa-2x mb-2"></i>
