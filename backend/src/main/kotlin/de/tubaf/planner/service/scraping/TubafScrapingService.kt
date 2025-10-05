@@ -18,6 +18,7 @@ import de.tubaf.planner.service.SemesterService
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import jakarta.annotation.PreDestroy
+import jakarta.persistence.EntityManager
 import okhttp3.FormBody
 import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
@@ -64,6 +65,7 @@ open class TubafScrapingService(
     private val scrapingConfiguration: ScrapingConfiguration,
     private val transactionManager: PlatformTransactionManager,
     private val meterRegistry: MeterRegistry,
+    private val entityManager: EntityManager,
     @Value("\${tubaf.scraper.base-url:https://evlvz.hrz.tu-freiberg.de/~vover}")
     private val baseUrl: String,
     @Value("\${tubaf.scraper.encoding.fix-legacy:true}")
@@ -918,6 +920,7 @@ open class TubafScrapingService(
             saved
         } catch (ex: DataIntegrityViolationException) {
             logger.debug("Parallel creation race for course type {}", code, ex)
+            entityManager.detach(newType)
             courseTypeRepository.findByCode(code)
                 ?: throw ex
         }
