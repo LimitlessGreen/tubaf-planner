@@ -736,8 +736,14 @@ open class TubafScrapingService(
 
         val alreadyLinked = managedCourse.courseStudyPrograms.any { it.studyProgram.id == studyProgram.id }
         if (!alreadyLinked) {
-            managedCourse.addStudyProgram(studyProgram, parseFachSemesterNumber(fachSemester))
-            courseRepository.save(managedCourse)
+            try {
+                managedCourse.addStudyProgram(studyProgram, parseFachSemesterNumber(fachSemester))
+                courseRepository.save(managedCourse)
+            } catch (ex: DataIntegrityViolationException) {
+                // Race condition: Ein anderer Thread hat bereits die Verknüpfung erstellt
+                logger.debug("Parallel link creation for course {} and studyProgram {}", course.id, studyProgram.id, ex)
+                // Nicht kritisch - Verknüpfung existiert bereits
+            }
         }
     }
 
@@ -986,8 +992,19 @@ open class TubafScrapingService(
             email = parsed.email,
             title = parsed.title?.take(50),
         )
-        val saved = lecturerRepository.save(lecturer)
-        changeTrackingService.logEntityCreated(scrapingRunId, "Lecturer", saved.id!!)
+        val saved = try {
+            lecturerRepository.save(lecturer)
+        } catch (ex: DataIntegrityViolationException) {
+            logger.debug("Parallel creation race for lecturer '{}'", parsed.name, ex)
+            entityManager.detach(lecturer)
+            // Versuche nochmal zu finden - entweder nach Email oder Name
+            parsed.email?.let { lecturerRepository.findByEmailIgnoreCase(it) }
+                ?: lecturerRepository.findByNameContainingIgnoreCaseAndActive(parsed.name).firstOrNull()
+                ?: throw ex
+        }
+        if (saved.id != null) {
+            changeTrackingService.logEntityCreated(scrapingRunId, "Lecturer", saved.id!!)
+        }
         if (parsed.modified || parsed.truncated) {
             val flags = buildList {
                 if (parsed.modified) add("normalized")
@@ -1136,11 +1153,12 @@ open class TubafScrapingService(
             roomRepository.save(room)
         } catch (ex: org.springframework.dao.DataIntegrityViolationException) {
             logger.debug("Room with code {} already persisted concurrently: {}", value, ex.message)
+            entityManager.detach(room)
             created = false
             roomRepository.findByCode(value) ?: throw ex
         }
 
-        if (created) {
+        if (created && saved.id != null) {
             changeTrackingService.logEntityCreated(scrapingRunId, "Room", saved.id!!)
         }
         return saved
