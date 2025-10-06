@@ -23,7 +23,6 @@ import okhttp3.FormBody
 import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -33,11 +32,17 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.ConnectException
 import java.net.CookieManager
 import java.net.CookiePolicy
+import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.DayOfWeek
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -1539,6 +1544,11 @@ open class TubafScrapingService(
             .followRedirects(true)
             .followSslRedirects(true)
             .cookieJar(JavaNetCookieJar(cookieManager))
+            .retryOnConnectionFailure(true)
+            .callTimeout(Duration.ofMillis(scrapingConfiguration.timeout))
+            .connectTimeout(Duration.ofMillis(scrapingConfiguration.timeout))
+            .readTimeout(Duration.ofMillis(scrapingConfiguration.timeout))
+            .writeTimeout(Duration.ofMillis(scrapingConfiguration.timeout))
             .build()
 
         private val trimmedBase = baseUrl.trimEnd('/')
@@ -1702,6 +1712,7 @@ open class TubafScrapingService(
 
         private fun request(method: String, path: String, formData: Map<String, String>? = null, referer: String? = null): Document {
             val targetUrl = url(path)
+            val operationName = "HTTP ${method.uppercase(Locale.ROOT)} $targetUrl"
             val builder =
                 Request.Builder()
                     .url(targetUrl)
@@ -1724,18 +1735,101 @@ open class TubafScrapingService(
                 builder.get()
             }
 
-            httpClient.newCall(builder.build()).execute().use { response ->
-                ensureSuccess(response)
-                val body = response.body?.string() ?: throw IllegalStateException("Leere Antwort vom Server")
-                return Jsoup.parse(body, targetUrl)
+            return executeWithRetry(operationName) {
+                httpClient.newCall(builder.build()).execute().use { response ->
+                    val bodyString = response.body?.string()
+
+                    if (!response.isSuccessful) {
+                        val message = "HTTP ${response.code} für ${response.request.url}"
+                        if (shouldRetryStatus(response.code)) {
+                            throw RetryableHttpException(response.code, message)
+                        }
+                        val bodySnippet = bodyString?.take(200)
+                        throw IllegalStateException("$message – ${bodySnippet ?: ""}")
+                    }
+
+                    val body = bodyString ?: throw IOException("Leere Antwort vom Server")
+                    Jsoup.parse(body, targetUrl)
+                }
             }
         }
 
-        private fun ensureSuccess(response: Response) {
-            if (!response.isSuccessful) {
-                val bodySnippet = response.body?.string()?.take(200)
-                throw IllegalStateException("HTTP ${response.code} für ${response.request.url} – ${bodySnippet ?: ""}")
+        private fun shouldRetryStatus(statusCode: Int): Boolean = statusCode == 408 || statusCode == 429 || statusCode >= 500
+
+        private fun <T> executeWithRetry(operationName: String, block: () -> T): T {
+            val maxAttempts = scrapingConfiguration.maxRetries.coerceAtLeast(1)
+            val baseDelay = scrapingConfiguration.retryDelay.coerceAtLeast(0)
+            var attempt = 1
+            var lastException: Exception? = null
+
+            while (attempt <= maxAttempts) {
+                ensureNotCancelled()
+                try {
+                    return block()
+                } catch (ex: Exception) {
+                    if (ex is InterruptedException) {
+                        throw ex
+                    }
+
+                    lastException = ex
+                    val retryable = isRetryableException(ex)
+                    logger.warn("{} fehlgeschlagen (Versuch {}/{}): {}", operationName, attempt, maxAttempts, ex.message)
+                    progressTracker.log(
+                        ScrapingLogLevel.WARN,
+                        "$operationName fehlgeschlagen (Versuch $attempt/$maxAttempts): ${ex.message}",
+                    )
+
+                    if (!retryable || attempt == maxAttempts) {
+                        if (retryable && attempt == maxAttempts) {
+                            progressTracker.log(
+                                ScrapingLogLevel.ERROR,
+                                "$operationName scheiterte nach $maxAttempts Versuchen: ${ex.message}",
+                                ex.stackTraceToString(),
+                            )
+                            throw IllegalStateException(
+                                "$operationName scheiterte nach $maxAttempts Versuchen",
+                                ex,
+                            )
+                        }
+                        throw ex
+                    }
+
+                    val delay = baseDelay * attempt.toLong()
+                    if (delay > 0) {
+                        try {
+                            Thread.sleep(delay)
+                        } catch (ie: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                            throw ie
+                        }
+                    }
+
+                    attempt += 1
+                }
             }
+
+            throw lastException ?: IllegalStateException("$operationName schlug fehl")
+        }
+
+        private fun isRetryableException(exception: Exception): Boolean {
+            if (exception is RetryableHttpException) {
+                return true
+            }
+
+            if (exception is SocketTimeoutException || exception is ConnectException) {
+                return true
+            }
+
+            if (exception is SocketException || exception is InterruptedIOException) {
+                return true
+            }
+
+            if (exception is IOException) {
+                val message = exception.message?.lowercase(Locale.getDefault()) ?: return false
+                return message.contains("timeout") || message.contains("connection") || message.contains("network")
+            }
+
+            return false
         }
 
         private fun url(path: String): String {
@@ -1900,6 +1994,8 @@ enum class ScrapingLogLevel {
     WARN,
     ERROR,
 }
+
+private class RetryableHttpException(val statusCode: Int, message: String, cause: Throwable? = null) : IOException(message, cause)
 
 data class ScrapingSubTask(
     val id: String,
