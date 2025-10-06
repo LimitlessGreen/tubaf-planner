@@ -125,6 +125,7 @@ open class TubafScrapingService(
         programs: List<StudyProgramOption>,
         stats: ScrapeStats,
         subTaskId: String?,
+        trackProgress: Boolean,
     ) {
         if (programs.isEmpty()) return
 
@@ -180,12 +181,14 @@ open class TubafScrapingService(
                         releaseSession(sessionWrapper)
                         val done = completed.incrementAndGet()
                         val updateMsg = program.code + " abgeschlossen (" + done + "/" + programs.size + ")"
-                        progressTracker.update(
-                            task = "Parallel " + semester.shortName,
-                            processed = done,
-                            total = programs.size,
-                            message = updateMsg,
-                        )
+                        if (trackProgress) {
+                            progressTracker.update(
+                                task = "Parallel " + semester.shortName,
+                                processed = done,
+                                total = programs.size,
+                                message = updateMsg,
+                            )
+                        }
                         if (subTaskId != null) {
                             progressTracker.updateSubTask(
                                 id = subTaskId,
@@ -486,7 +489,14 @@ open class TubafScrapingService(
                 }
 
                 if (scrapingConfiguration.parallelEnabled) {
-                    parallelScrapePrograms(semester, scrapingRun.id!!, programs, stats, subTaskId)
+                    parallelScrapePrograms(
+                        semester,
+                        scrapingRun.id!!,
+                        programs,
+                        stats,
+                        subTaskId,
+                        trackProgress,
+                    )
                 } else {
                     programs.forEachIndexed { index, program ->
                         ensureNotCancelled()
