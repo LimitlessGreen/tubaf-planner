@@ -30,6 +30,7 @@ class DataController(
                 changeTrackingService.getLastSuccessfulRun(semester.id!!)
             }
         model.addAttribute("lastRuns", lastRuns)
+        model.addAttribute("activePage", "data")
 
         return "data/overview"
     }
@@ -77,6 +78,7 @@ class DataController(
         model.addAttribute("currentTask", progress.message ?: progress.currentTask)
         model.addAttribute("processedCount", progress.processedCount)
         model.addAttribute("totalCount", progress.totalCount)
+        model.addAttribute("activePage", "data-scraping")
 
         return "data/scraping"
     }
@@ -113,6 +115,7 @@ class DataController(
         model.addAttribute("semester", run.semester)
         model.addAttribute("changes", changes)
         model.addAttribute("changeStatistics", statistics)
+        model.addAttribute("activePage", "data-scraping")
 
         return "data/scraping-detail"
     }
@@ -122,6 +125,7 @@ class DataController(
         val allSemesters = semesterService.getAllSemesters()
 
         model.addAttribute("semesters", allSemesters)
+        model.addAttribute("activePage", "data-semesters")
 
         return "data/semesters"
     }
@@ -133,6 +137,7 @@ class DataController(
 
         model.addAttribute("studyPrograms", studyPrograms)
         model.addAttribute("statistics", stats)
+        model.addAttribute("activePage", "data-study-programs")
 
         return "data/study-programs"
     }
@@ -144,6 +149,7 @@ class DataController(
 
         model.addAttribute("rooms", rooms)
         model.addAttribute("statistics", stats)
+        model.addAttribute("activePage", "data-rooms")
 
         return "data/rooms"
     }

@@ -23,6 +23,7 @@ class HomeController(
 
         model.addAttribute("activeSemesters", activeSemesters)
         model.addAttribute("currentSemester", currentSemester)
+        model.addAttribute("activePage", "dashboard")
 
         // Schnelle Statistiken
         currentSemester?.id?.let { semesterId ->
@@ -42,5 +43,8 @@ class HomeController(
     }
 
     @GetMapping("/about")
-    fun about(): String = "about"
+    fun about(model: Model): String {
+        model.addAttribute("activePage", "dashboard")
+        return "about"
+    }
 }

@@ -21,6 +21,7 @@ class ScheduleController(
     fun scheduleOverview(model: Model): String {
         model.addAttribute("semesters", semesterService.getActiveSemesters())
         model.addAttribute("studyPrograms", studyProgramService.getActiveStudyPrograms())
+        model.addAttribute("activePage", "schedule")
         return "schedule/overview"
     }
 
@@ -81,6 +82,7 @@ class ScheduleController(
         model.addAttribute("scheduleStats", scheduleStats)
         model.addAttribute("conflictingEntryIds", conflictingEntryIds)
         model.addAttribute("studyProgramNotFound", studyProgramId != null && studyProgram == null)
+        model.addAttribute("activePage", "schedule")
 
         return "schedule/semester"
     }
@@ -116,6 +118,7 @@ class ScheduleController(
         model.addAttribute("currentSemester", currentSemester)
         model.addAttribute("utilization", utilization)
         model.addAttribute("daySchedules", daySchedules)
+        model.addAttribute("activePage", "schedule")
 
         return "schedule/room"
     }
@@ -140,6 +143,7 @@ class ScheduleController(
         model.addAttribute("semesters", activeSemesters)
         model.addAttribute("currentSemester", currentSemester)
         model.addAttribute("lecturerId", lecturerId)
+        model.addAttribute("activePage", "schedule")
 
         return "schedule/lecturer"
     }

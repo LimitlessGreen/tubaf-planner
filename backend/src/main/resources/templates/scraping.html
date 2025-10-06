@@ -1,20 +1,10 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org">
+<html lang="de" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/base :: layout('Scraping Übersicht', ~{::content})}"
+      th:with="activePage='data-scraping'">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scraping Übersicht - TUBAF Planner</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css">
-    
     <style>
-        .navbar-brand img {
-            height: 32px;
-            width: auto;
-            margin-right: 10px;
-        }
         .card {
             box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
             border: 1px solid rgba(0, 0, 0, 0.125);
@@ -34,65 +24,7 @@
     </style>
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">
-                <i class="bi bi-calendar3"></i>
-                TUBAF Planner
-            </a>
-            
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/"><i class="bi bi-house"></i> Dashboard</a>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-calendar-week"></i> Stundenplan
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/schedule/overview">Übersicht</a></li>
-                            <li><a class="dropdown-item" href="/schedule/semester">Nach Semester</a></li>
-                            <li><a class="dropdown-item" href="/schedule/rooms">Raumbelegung</a></li>
-                            <li><a class="dropdown-item" href="/schedule/grid">Stundenplan-Raster</a></li>
-                        </ul>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-book"></i> Kurse
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/courses/overview">Kursübersicht</a></li>
-                        </ul>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-database"></i> Daten
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/data/overview">Datenübersicht</a></li>
-                            <li><a class="dropdown-item" href="/scraping">Scraping</a></li>
-                        </ul>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-calendar-date"></i> Semester
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/semesters">Semester Liste</a></li>
-                        </ul>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Main Content -->
+<div th:fragment="content">
     <div class="container-fluid mt-4">
         <div class="row">
             <div class="col-12">
@@ -107,217 +39,207 @@
             </div>
         </div>
 
-    <!-- Info Alert -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="alert alert-info">
-                <h5><i class="bi bi-info-circle"></i> Über das Scraping</h5>
-                <p>
-                    Das System lädt automatisch Daten von der TUBAF Stundenplan-Website 
-                    (<a href="https://evlvz.hrz.tu-freiberg.de/~vover/" target="_blank">evlvz.hrz.tu-freiberg.de/~vover/</a>).
-                    Alle Änderungen werden versioniert und können nachverfolgt werden.
-                </p>
-                <p class="mb-0">
-                    <strong>Hinweis:</strong> Ein Scraping-Lauf kann je nach Datenmenge einige Minuten dauern.
-                </p>
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <h5><i class="bi bi-info-circle"></i> Über das Scraping</h5>
+                    <p>
+                        Das System lädt automatisch Daten von der TUBAF Stundenplan-Website
+                        (<a href="https://evlvz.hrz.tu-freiberg.de/~vover/" target="_blank">evlvz.hrz.tu-freiberg.de/~vover/</a>).
+                        Alle Änderungen werden versioniert und können nachverfolgt werden.
+                    </p>
+                    <p class="mb-0">
+                        <strong>Hinweis:</strong> Ein Scraping-Lauf kann je nach Datenmenge einige Minuten dauern.
+                    </p>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- Manual Scraping Form -->
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-play-circle"></i> Manuelles Scraping</h5>
-                </div>
-                <div class="card-body">
-                    <form id="scrapingForm">
-                        <div class="mb-3">
-                            <label for="semesterSelect" class="form-label">Semester auswählen:</label>
-                            <select class="form-select" id="semesterSelect" name="semesterId">
-                                <option value="">Automatisch erkennen</option>
-                                <!-- Options would be populated by backend -->
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="fullScraping" name="fullScraping">
-                                <label class="form-check-label" for="fullScraping">
-                                    Vollständiges Scraping (alle Studiengänge)
-                                </label>
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-play-circle"></i> Manuelles Scraping</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="scrapingForm">
+                            <div class="mb-3">
+                                <label for="semesterSelect" class="form-label">Semester auswählen:</label>
+                                <select class="form-select" id="semesterSelect" name="semesterId">
+                                    <option value="">Automatisch erkennen</option>
+                                </select>
                             </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-download"></i> Scraping starten
-                        </button>
-                    </form>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="fullScraping" name="fullScraping">
+                                    <label class="form-check-label" for="fullScraping">
+                                        Vollständiges Scraping (alle Studiengänge)
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-download"></i> Scraping starten
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-speedometer2"></i> Scraping Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2">Aktueller Status: <span id="scrapingStatus" class="badge bg-success">Bereit</span></p>
+                        <p class="text-muted mb-0">
+                            Fortschritt und Statusmeldungen erscheinen hier während eines Scraping-Laufs.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
-        
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-gear"></i> Scraping Einstellungen</h5>
+
+        <div class="row">
+            <div class="col-lg-4 mb-4">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-clock-history"></i> Letzter Lauf</h5>
+                        <p class="card-text text-muted">Keine Daten verfügbar</p>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label">Zeitplan:</label>
-                        <div class="form-text">
-                            <i class="bi bi-clock"></i> Automatisches Scraping: Täglich um 6:00 Uhr<br>
-                            <i class="bi bi-arrow-repeat"></i> Letzte Ausführung: <span id="lastRun">Unbekannt</span>
-                        </div>
+            </div>
+            <div class="col-lg-4 mb-4">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-graph-up"></i> Neue Einträge</h5>
+                        <p class="card-text text-muted">Wird nach Abschluss angezeigt</p>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Status:</label>
-                        <div>
-                            <span class="badge bg-success" id="scrapingStatus">Bereit</span>
-                        </div>
+                </div>
+            </div>
+            <div class="col-lg-4 mb-4">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-arrow-repeat"></i> Aktualisierte Einträge</h5>
+                        <p class="card-text text-muted">Wird nach Abschluss angezeigt</p>
                     </div>
-                    <a href="/api/scraping" class="btn btn-outline-secondary" target="_blank">
-                        <i class="bi bi-gear"></i> API Dokumentation
-                    </a>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Recent Scraping Runs (Placeholder) -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-list"></i> Letzte Scraping-Läufe</h5>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-light text-center">
-                        <i class="bi bi-info-circle"></i>
-                        Scraping-Historie wird hier angezeigt, sobald erste Läufe durchgeführt wurden.
-                    </div>
-                </div>
-            </div>
-        </div>
-        </div>
-    </div>
-    </div>
-
-    <!-- Footer -->
     <footer class="bg-light mt-auto">
         <div class="container-fluid">
             <div class="row">
                 <div class="col-12 text-center">
                     <p class="mb-0">
-                        © 2024 TUBAF Planner - 
+                        © 2024 TUBAF Planner -
                         <a href="https://tu-freiberg.de" target="_blank" class="text-decoration-none">TU Bergakademie Freiberg</a>
                     </p>
                 </div>
             </div>
         </div>
     </footer>
+</div>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let isScrapingRunning = false;
 
-    <script>
-    let isScrapingRunning = false;
+document.addEventListener('DOMContentLoaded', function() {
+    loadSemesters();
+    updateScrapingStatus();
+});
 
-    // Load semesters on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        loadSemesters();
-        updateScrapingStatus();
-    });
+async function loadSemesters() {
+    try {
+        const response = await fetch('/api/semesters');
+        const semesters = await response.json();
 
-    async function loadSemesters() {
-        try {
-            const response = await fetch('/api/semesters');
-            const semesters = await response.json();
-            
-            const select = document.getElementById('semesterSelect');
-            select.innerHTML = '<option value="">Alle aktiven Semester</option>';
-            
-            semesters.forEach(semester => {
-                const option = document.createElement('option');
-                option.value = semester.id;
-                option.textContent = `${semester.name} (${semester.shortName})`;
-                select.appendChild(option);
-            });
-        } catch (error) {
-            console.error('Fehler beim Laden der Semester:', error);
-        }
-    }
+        const select = document.getElementById('semesterSelect');
+        select.innerHTML = '<option value="">Alle aktiven Semester</option>';
 
-    async function startScraping() {
-        if (isScrapingRunning) {
-            alert('Ein Scraping-Vorgang läuft bereits!');
-            return;
-        }
-
-        const semesterId = document.getElementById('semesterSelect').value;
-        const isFullScraping = document.getElementById('fullScraping').checked;
-        
-        const confirmMessage = semesterId 
-            ? `Scraping für ausgewähltes Semester starten? Dies kann einige Minuten dauern.`
-            : `Scraping für alle aktiven Semester starten? Dies kann sehr lange dauern.`;
-            
-        if (!confirm(confirmMessage)) return;
-
-        isScrapingRunning = true;
-        updateScrapingStatus('Läuft...', 'warning');
-        
-        try {
-            const url = semesterId 
-                ? `/api/scraping/semester/${semesterId}/scrape`
-                : '/api/scraping/scrape-all';
-                
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                showScrapingResult(result);
-                updateScrapingStatus('Bereit', 'success');
-            } else {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-        } catch (error) {
-            console.error('Scraping-Fehler:', error);
-            alert(`Fehler beim Scraping: ${error.message}`);
-            updateScrapingStatus('Fehler', 'danger');
-        } finally {
-            isScrapingRunning = false;
-        }
-    }
-
-    function updateScrapingStatus(status = 'Bereit', type = 'success') {
-        const statusElement = document.getElementById('scrapingStatus');
-        statusElement.textContent = status;
-        statusElement.className = `badge bg-${type}`;
-    }
-
-    function showScrapingResult(result) {
-        const results = Array.isArray(result) ? result : [result];
-        let message = 'Scraping erfolgreich abgeschlossen!\n\n';
-        
-        results.forEach((res, index) => {
-            if (results.length > 1) message += `Semester ${index + 1}:\n`;
-            message += `- Neue Einträge: ${res.newEntries || 0}\n`;
-            message += `- Aktualisierte Einträge: ${res.updatedEntries || 0}\n`;
-            message += `- Gesamte Einträge: ${res.totalEntries || 0}\n`;
-            if (results.length > 1) message += '\n';
+        semesters.forEach(semester => {
+            const option = document.createElement('option');
+            option.value = semester.id;
+            option.textContent = `${semester.name} (${semester.shortName})`;
+            select.appendChild(option);
         });
-        
-        alert(message);
+    } catch (error) {
+        console.error('Fehler beim Laden der Semester:', error);
+    }
+}
+
+async function startScraping() {
+    if (isScrapingRunning) {
+        alert('Ein Scraping-Vorgang läuft bereits!');
+        return;
     }
 
-    document.getElementById('scrapingForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        startScraping();
+    const semesterId = document.getElementById('semesterSelect').value;
+    const isFullScraping = document.getElementById('fullScraping').checked;
+
+    const confirmMessage = semesterId
+        ? `Scraping für ausgewähltes Semester starten? Dies kann einige Minuten dauern.`
+        : `Scraping für alle aktiven Semester starten? Dies kann sehr lange dauern.`;
+
+    if (!confirm(confirmMessage)) return;
+
+    isScrapingRunning = true;
+    updateScrapingStatus('Läuft...', 'warning');
+
+    try {
+        const url = semesterId
+            ? `/api/scraping/semester/${semesterId}/scrape`
+            : '/api/scraping/scrape-all';
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            showScrapingResult(result);
+            updateScrapingStatus('Bereit', 'success');
+        } else {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+    } catch (error) {
+        console.error('Scraping-Fehler:', error);
+        alert(`Fehler beim Scraping: ${error.message}`);
+        updateScrapingStatus('Fehler', 'danger');
+    } finally {
+        isScrapingRunning = false;
+    }
+}
+
+function updateScrapingStatus(status = 'Bereit', type = 'success') {
+    const statusElement = document.getElementById('scrapingStatus');
+    statusElement.textContent = status;
+    statusElement.className = `badge bg-${type}`;
+}
+
+function showScrapingResult(result) {
+    const results = Array.isArray(result) ? result : [result];
+    let message = 'Scraping erfolgreich abgeschlossen!\n\n';
+
+    results.forEach((res, index) => {
+        if (results.length > 1) message += `Semester ${index + 1}:\n`;
+        message += `- Neue Einträge: ${res.newEntries || 0}\n`;
+        message += `- Aktualisierte Einträge: ${res.updatedEntries || 0}\n`;
+        message += `- Gesamte Einträge: ${res.totalEntries || 0}\n`;
+        if (results.length > 1) message += '\n';
     });
-    </script>
+
+    alert(message);
+}
+
+document.getElementById('scrapingForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    startScraping();
+});
+</script>
 </body>
 </html>

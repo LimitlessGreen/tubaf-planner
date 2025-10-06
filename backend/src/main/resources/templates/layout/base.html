@@ -8,6 +8,7 @@
     <!-- Bootstrap CSS -->
     <link th:href="@{/webjars/bootstrap/css/bootstrap.min.css}" rel="stylesheet">
     <link th:href="@{/webjars/font-awesome/css/all.min.css}" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     
     <!-- Custom CSS -->
     <style>
@@ -44,43 +45,7 @@
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand" th:href="@{/}">
-                <i class="fas fa-calendar-alt me-2"></i>TUBAF Stundenplan-Planer
-            </a>
-            
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" th:href="@{/}"><i class="fas fa-home me-1"></i>Dashboard</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" th:href="@{/schedule}"><i class="fas fa-calendar me-1"></i>Stundenplan</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" th:href="@{/courses}"><i class="fas fa-book me-1"></i>Kurse</a>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-database me-1"></i>Daten
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" th:href="@{/data}">Übersicht</a></li>
-                            <li><a class="dropdown-item" th:href="@{/data/scraping}">Scraping</a></li>
-                            <li><a class="dropdown-item" th:href="@{/data/semesters}">Semester</a></li>
-                            <li><a class="dropdown-item" th:href="@{/data/study-programs}">Studiengänge</a></li>
-                            <li><a class="dropdown-item" th:href="@{/data/rooms}">Räume</a></li>
-                        </ul>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    <div th:replace="~{fragments/navigation :: navbar(activePage=${activePage})}"></div>
 
     <!-- Main Content -->
     <div class="container-fluid">
