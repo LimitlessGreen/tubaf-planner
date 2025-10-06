@@ -275,6 +275,9 @@ class ScrapingController(
                 )
             }
         }
+        if (progress.logCounts.isNotEmpty()) {
+            response["logCounts"] = progress.logCounts.mapKeys { (level, _) -> level.name.lowercase() }
+        }
         if (progress.subTasks.isNotEmpty()) {
             response["subTasks"] = progress.subTasks.map { st ->
                 mapOf(
@@ -378,6 +381,9 @@ class ScrapingController(
                     "message" to it.message,
                     "timestamp" to it.timestamp,
                 )
+            }
+            if (progress.logCounts.isNotEmpty()) {
+                response["logCounts"] = progress.logCounts.mapKeys { (level, _) -> level.name.lowercase() }
             }
 
             ResponseEntity.ok(response)

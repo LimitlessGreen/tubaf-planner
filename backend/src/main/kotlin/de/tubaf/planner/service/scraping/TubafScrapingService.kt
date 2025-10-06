@@ -43,6 +43,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Collections
+import java.util.EnumMap
 import java.util.Locale
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.BlockingQueue
@@ -199,9 +200,15 @@ open class TubafScrapingService(
 
         progressTracker.log(
             ScrapingLogLevel.INFO,
-            "⚙️ Parallel: workers=$maxWorkers, sessions=$poolSize",
+            "Parallelmodus aktiv – Worker: $maxWorkers, Sessions: $poolSize",
         )
-        logger.info("Starte paralleles Scraping: {} Programme, {} Worker, {} Sessions", programs.size, maxWorkers, poolSize)
+        logger.info(
+            "Starte paralleles Scraping für {}: Programme={}, Worker={}, Sessions={}",
+            semester.name,
+            programs.size,
+            maxWorkers,
+            poolSize,
+        )
 
         val sessionPool = createSessionPool(poolSize)
         sessionPool.forEach { wrapper ->
@@ -645,14 +652,18 @@ open class TubafScrapingService(
                 )
 
                 logger.info(
-                    "Scraping erfolgreich abgeschlossen – Kurse: {}, neu: {}, aktualisiert: {}",
+                    "Scraping abgeschlossen für {} – Einträge={}, neu={}, aktualisiert={}",
+                    semester.name,
                     stats.totalEntries,
                     stats.newEntries,
                     stats.updatedEntries,
                 )
 
+                val summaryMessage = buildScrapingSummary(semester, stats)
                 if (trackProgress) {
-                    progressTracker.finish("Scraping ${semester.name} abgeschlossen")
+                    progressTracker.finish(summaryMessage)
+                } else {
+                    progressTracker.log(ScrapingLogLevel.INFO, summaryMessage)
                 }
             } finally {
                 semesterSample.stop(semesterTimer)
@@ -725,6 +736,11 @@ open class TubafScrapingService(
                 "deaktiviert $disabled)"
             )
     }
+
+    private fun buildScrapingSummary(semester: Semester, stats: ScrapeStats): String = (
+        "Scraping für ${semester.name} abgeschlossen – " +
+            "${stats.totalEntries} Einträge (neu ${stats.newEntries}, aktualisiert ${stats.updatedEntries})"
+        )
 
     private fun persistRows(rows: List<ScrapedRow>, semester: Semester, scrapingRunId: Long, stats: ScrapeStats) {
         for (row in rows) {
@@ -1859,6 +1875,7 @@ data class ScrapingProgressSnapshot(
     val message: String? = null,
     val logs: List<ScrapingLogEntry> = emptyList(),
     val subTasks: List<ScrapingSubTask> = emptyList(),
+    val logCounts: Map<ScrapingLogLevel, Int> = emptyMap(),
 )
 
 data class ScrapingLogEntry(
@@ -1900,14 +1917,26 @@ private class ScrapingProgressTracker {
     private var state = ScrapingProgressSnapshot()
     private val subTaskMap = linkedMapOf<String, ScrapingSubTask>()
     private var logSequence: Long = 0
+    private val logCounters = EnumMap<ScrapingLogLevel, Int>(ScrapingLogLevel::class.java)
+
+    init {
+        resetLogStateLocked(resetSequence = true)
+    }
 
     fun snapshot(): ScrapingProgressSnapshot = synchronized(lock) {
-        state.copy(logs = state.logs.takeLast(MAX_LOGS), subTasks = subTaskMap.values.map { it.copy() })
+        state.copy(
+            logs = state.logs.takeLast(MAX_LOGS),
+            subTasks = subTaskMap.values.map { it.copy() },
+            logCounts = snapshotLogCountsLocked(),
+        )
     }
 
     fun start(totalCount: Int, task: String, message: String) {
         synchronized(lock) {
+            resetLogStateLocked(resetSequence = true)
+            subTaskMap.clear()
             val sanitizedTotal = if (totalCount < 0) 0 else totalCount
+            val logs = appendLog(emptyList(), ScrapingLogLevel.INFO, message)
             state = ScrapingProgressSnapshot(
                 status = ScrapingStatus.RUNNING,
                 currentTask = task,
@@ -1915,7 +1944,8 @@ private class ScrapingProgressTracker {
                 totalCount = sanitizedTotal,
                 progress = computeProgress(0, sanitizedTotal),
                 message = message,
-                logs = appendLog(state.logs, ScrapingLogLevel.INFO, message),
+                logs = logs,
+                logCounts = snapshotLogCountsLocked(),
             )
         }
     }
@@ -1933,6 +1963,7 @@ private class ScrapingProgressTracker {
                 progress = newProgress,
                 message = message ?: state.message,
                 logs = updatedLogs,
+                logCounts = snapshotLogCountsLocked(),
             )
         }
     }
@@ -1942,6 +1973,7 @@ private class ScrapingProgressTracker {
             state = state.copy(
                 message = message,
                 logs = appendLog(state.logs, level, message, detail),
+                logCounts = snapshotLogCountsLocked(),
             )
         }
     }
@@ -1955,6 +1987,7 @@ private class ScrapingProgressTracker {
                 progress = 100,
                 message = message,
                 logs = appendLog(state.logs, ScrapingLogLevel.INFO, message),
+                logCounts = snapshotLogCountsLocked(),
             )
         }
     }
@@ -1965,6 +1998,7 @@ private class ScrapingProgressTracker {
                 status = ScrapingStatus.FAILED,
                 message = message,
                 logs = appendLog(state.logs, ScrapingLogLevel.ERROR, message),
+                logCounts = snapshotLogCountsLocked(),
             )
         }
     }
@@ -1975,19 +2009,21 @@ private class ScrapingProgressTracker {
                 status = ScrapingStatus.PAUSED,
                 message = message,
                 logs = appendLog(state.logs, ScrapingLogLevel.WARN, message),
+                logCounts = snapshotLogCountsLocked(),
             )
         }
     }
 
     fun reset(message: String? = null) {
         synchronized(lock) {
+            resetLogStateLocked(resetSequence = true)
+            subTaskMap.clear()
             val updatedLogs =
                 if (!message.isNullOrBlank()) {
-                    appendLog(state.logs, ScrapingLogLevel.INFO, message)
+                    appendLog(emptyList(), ScrapingLogLevel.INFO, message)
                 } else {
-                    state.logs.takeLast(MAX_LOGS)
+                    emptyList()
                 }
-            subTaskMap.clear()
             state = ScrapingProgressSnapshot(
                 status = ScrapingStatus.IDLE,
                 currentTask = "Bereit",
@@ -1995,7 +2031,8 @@ private class ScrapingProgressTracker {
                 totalCount = 0,
                 progress = 0,
                 message = message,
-                logs = updatedLogs.takeLast(MAX_LOGS),
+                logs = updatedLogs,
+                logCounts = snapshotLogCountsLocked(),
             )
         }
     }
@@ -2061,17 +2098,17 @@ private class ScrapingProgressTracker {
         val avgProgress = list.map { it.progress }.average().toInt()
         val processedSum = list.sumOf { it.processed }
         val totalSum = list.sumOf { it.total.coerceAtLeast(0) }
-        val overallProgress = if (totalSum >
-            0
-        ) {
-            ((processedSum.toDouble() / totalSum.toDouble()) * 100).toInt().coerceIn(0, 100)
-        } else {
-            avgProgress
-        }
+        val overallProgress =
+            if (totalSum > 0) {
+                ((processedSum.toDouble() / totalSum.toDouble()) * 100).toInt().coerceIn(0, 100)
+            } else {
+                avgProgress
+            }
         state = state.copy(
             progress = overallProgress,
             processedCount = processedSum,
             totalCount = totalSum,
+            logCounts = snapshotLogCountsLocked(),
         )
     }
 
@@ -2081,6 +2118,7 @@ private class ScrapingProgressTracker {
         message: String,
         detail: String? = null,
     ): List<ScrapingLogEntry> {
+        incrementLogCounter(level)
         val sanitizedDetail = detail?.takeIf { it.isNotBlank() }?.let {
             if (it.length > MAX_LOG_DETAIL) it.take(MAX_LOG_DETAIL) + "…" else it
         }
@@ -2092,6 +2130,22 @@ private class ScrapingProgressTracker {
         )
         return (current + entry).takeLast(MAX_LOGS)
     }
+
+    private fun incrementLogCounter(level: ScrapingLogLevel) {
+        val current = logCounters[level] ?: 0
+        logCounters[level] = current + 1
+    }
+
+    private fun resetLogStateLocked(resetSequence: Boolean) {
+        if (resetSequence) {
+            logSequence = 0
+        }
+        logCounters.clear()
+        enumValues<ScrapingLogLevel>().forEach { logCounters[it] = 0 }
+    }
+
+    private fun snapshotLogCountsLocked(): Map<ScrapingLogLevel, Int> =
+        enumValues<ScrapingLogLevel>().associateWith { level -> logCounters[level] ?: 0 }
 
     companion object {
         private const val MAX_LOGS = 100
