@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Navigation</title>
+</head>
+<body>
+<nav th:fragment="navbar(activePage)"
+     class="navbar navbar-expand-lg navbar-dark bg-primary"
+     th:with="current=${activePage} ?: ''">
+    <div class="container-fluid">
+        <a class="navbar-brand" th:href="@{/}">
+            <i class="bi bi-mortarboard-fill me-2"></i>TUBAF Planner
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Navigation umschalten">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <li class="nav-item">
+                    <a class="nav-link"
+                       th:href="@{/}"
+                       th:classappend="${current == 'dashboard'} ? ' active' : ''"
+                       th:attr="aria-current=${current == 'dashboard'} ? 'page' : null">
+                        <i class="bi bi-house me-1"></i>Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link"
+                       th:href="@{/schedule}"
+                       th:classappend="${current == 'schedule'} ? ' active' : ''"
+                       th:attr="aria-current=${current == 'schedule'} ? 'page' : null">
+                        <i class="bi bi-calendar-week me-1"></i>Stundenplan
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link"
+                       th:href="@{/courses}"
+                       th:classappend="${current == 'courses'} ? ' active' : ''"
+                       th:attr="aria-current=${current == 'courses'} ? 'page' : null">
+                        <i class="bi bi-book me-1"></i>Kurse
+                    </a>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle"
+                       href="#"
+                       role="button"
+                       data-bs-toggle="dropdown"
+                       aria-expanded="false"
+                       th:classappend="${#strings.startsWith(current, 'data')} ? ' active' : ''">
+                        <i class="bi bi-database me-1"></i>Daten
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <a class="dropdown-item"
+                               th:href="@{/data}"
+                               th:classappend="${current == 'data'} ? ' active' : ''">
+                                Übersicht
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               th:href="@{/data/scraping}"
+                               th:classappend="${current == 'data-scraping'} ? ' active' : ''">
+                                Scraping
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               th:href="@{/data/semesters}"
+                               th:classappend="${current == 'data-semesters'} ? ' active' : ''">
+                                Semester
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               th:href="@{/data/study-programs}"
+                               th:classappend="${current == 'data-study-programs'} ? ' active' : ''">
+                                Studiengänge
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item"
+                               th:href="@{/data/rooms}"
+                               th:classappend="${current == 'data-rooms'} ? ' active' : ''">
+                                Räume
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a class="nav-link"
+                       th:href="@{/api/scraping}"
+                       target="_blank"
+                       rel="noopener noreferrer">
+                        <i class="bi bi-gear me-1"></i>API
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+</body>
+</html>

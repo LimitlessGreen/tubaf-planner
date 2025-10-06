@@ -1,64 +1,18 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org">
+<html lang="de" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/base :: layout('Dashboard', ~{::content})}">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - TUBAF Planner</title>
-    
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-    
-    <style>
-        body {
-            background-color: #f8f9fa;
-        }
-        .navbar-brand {
-            font-weight: bold;
-        }
-        .stats-card {
-            transition: transform 0.2s;
-        }
-        .stats-card:hover {
-            transform: translateY(-2px);
-        }
-    </style>
+    <title>Dashboard</title>
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
-        <div class="container">
-            <a class="navbar-brand" href="/">
-                <i class="bi bi-mortarboard-fill"></i> TUBAF Planner
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/"><i class="bi bi-house"></i> Dashboard</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/schedule"><i class="bi bi-calendar-week"></i> Stundenplan</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/scraping"><i class="bi bi-download"></i> Scraping</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Main Content -->
-    <main class="container-fluid py-4">
+<div th:fragment="content">
+    <div class="container-fluid py-4">
         <div class="row">
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h1><i class="bi bi-house-fill"></i> Dashboard</h1>
                     <div class="btn-group">
-                        <a href="/scraping" class="btn btn-outline-primary">
+                        <a th:href="@{/data/scraping}" class="btn btn-outline-primary">
                             <i class="bi bi-arrow-clockwise"></i> Daten aktualisieren
                         </a>
                     </div>
@@ -66,13 +20,12 @@
             </div>
         </div>
 
-        <!-- Current Semester Info -->
         <div class="row mb-4" th:if="${currentSemester}">
             <div class="col-md-8">
                 <div class="card border-primary">
                     <div class="card-header bg-primary text-white">
                         <h5 class="mb-0">
-                            <i class="bi bi-calendar-check"></i> Aktuelles Semester: 
+                            <i class="bi bi-calendar-check"></i> Aktuelles Semester:
                             <span th:text="${currentSemester.name}">Wintersemester 2024/25</span>
                         </h5>
                     </div>
@@ -84,8 +37,8 @@
                                 bis
                                 <span th:text="${#temporals.format(currentSemester.endDate, 'dd.MM.yyyy')}">31.03.2025</span>
                             </div>
-                            <div class="col-sm-6">
-                                <a th:href="@{/schedule/semester/{id}(id=${currentSemester.id})}" 
+                            <div class="col-sm-6 text-sm-end mt-3 mt-sm-0">
+                                <a th:href="@{/schedule/semester/{id}(id=${currentSemester.id})}"
                                    class="btn btn-primary">
                                     <i class="bi bi-eye"></i> Stundenplan anzeigen
                                 </a>
@@ -101,10 +54,10 @@
                     </div>
                     <div class="card-body">
                         <div class="d-grid gap-2">
-                            <a href="/schedule/rooms" class="btn btn-outline-secondary btn-sm">
+                            <a th:href="@{/schedule/rooms}" class="btn btn-outline-secondary btn-sm">
                                 <i class="bi bi-building"></i> Raumpläne
                             </a>
-                            <a href="/scraping" class="btn btn-outline-secondary btn-sm">
+                            <a th:href="@{/data/scraping}" class="btn btn-outline-secondary btn-sm">
                                 <i class="bi bi-download"></i> Daten laden
                             </a>
                         </div>
@@ -113,7 +66,6 @@
             </div>
         </div>
 
-        <!-- Statistics Cards -->
         <div class="row mb-4">
             <div class="col-md-3 mb-3">
                 <div class="card stats-card h-100 border-primary">
@@ -124,7 +76,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="col-md-3 mb-3">
                 <div class="card stats-card h-100 border-success">
                     <div class="card-body text-center">
@@ -134,7 +86,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="col-md-3 mb-3">
                 <div class="card stats-card h-100 border-warning">
                     <div class="card-body text-center">
@@ -144,7 +96,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="col-md-3 mb-3">
                 <div class="card stats-card h-100 border-info">
                     <div class="card-body text-center">
@@ -158,7 +110,7 @@
                             </span>
                         </h4>
                         <p class="card-text text-muted">
-                            <span th:if="${lastScrapingRun}">Letzter Scraping</span>
+                            <span th:if="${lastScrapingRun}">Letzter Scraping-Lauf</span>
                             <span th:unless="${lastScrapingRun}">Kein Scraping</span>
                         </p>
                     </div>
@@ -166,41 +118,37 @@
             </div>
         </div>
 
-        <!-- Empty State or Semester Info -->
-        <div class="row">
+        <div class="row" th:if="${activeSemesters and !activeSemesters.empty}">
             <div class="col-12">
-                <div class="alert alert-info text-center" th:if="${activeSemesters == null or activeSemesters.empty}">
-                    <h4><i class="bi bi-info-circle"></i> Willkommen bei TUBAF Planner!</h4>
-                    <p>Es wurden noch keine Semester-Daten geladen. Starten Sie mit dem Scraping, um TUBAF-Stundenpläne zu importieren.</p>
-                    <a href="/scraping" class="btn btn-primary">
-                        <i class="bi bi-download"></i> Erste Daten laden
-                    </a>
-                </div>
-                
-                <div class="card" th:if="${activeSemesters != null and !activeSemesters.empty}">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-calendar3"></i> Aktive Semester</h5>
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-calendar2-week"></i> Aktive Semester</h5>
+                        <a th:href="@{/data/semesters}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-list"></i> Alle Semester
+                        </a>
                     </div>
                     <div class="card-body">
-                        <div class="row">
-                            <div class="col-lg-4 mb-3" th:each="semester : ${activeSemesters}">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <h6 class="card-title" th:text="${semester.name}">Wintersemester 2024/25</h6>
-                                        <p class="card-text">
-                                            <small class="text-muted">
-                                                <strong>Kurz:</strong> <span th:text="${semester.shortName}">WS24</span><br>
-                                                <strong>Zeitraum:</strong><br>
-                                                <span th:text="${#temporals.format(semester.startDate, 'dd.MM.yyyy')}">01.10.2024</span> - 
-                                                <span th:text="${#temporals.format(semester.endDate, 'dd.MM.yyyy')}">31.03.2025</span>
-                                            </small>
-                                        </p>
-                                        <div class="d-grid gap-1">
-                                            <a th:href="@{/schedule/semester/{id}(id=${semester.id})}" 
-                                               class="btn btn-primary btn-sm">
-                                                <i class="bi bi-eye"></i> Stundenplan
-                                            </a>
-                                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-4" th:each="semester : ${activeSemesters}">
+                                <div class="border rounded p-3 h-100">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0" th:text="${semester.shortName}">WS24</h6>
+                                        <span class="badge bg-success">Aktiv</span>
+                                    </div>
+                                    <p class="mb-2 text-muted" th:text="${semester.name}">Wintersemester 2024/25</p>
+                                    <div class="d-flex justify-content-between small text-muted">
+                                        <span th:text="${#temporals.format(semester.startDate, 'dd.MM.yyyy')}">01.10.2024</span>
+                                        <span th:text="${#temporals.format(semester.endDate, 'dd.MM.yyyy')}">31.03.2025</span>
+                                    </div>
+                                    <div class="d-grid gap-2 mt-3">
+                                        <a th:href="@{/schedule/semester/{id}(id=${semester.id})}"
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-calendar-week"></i> Stundenplan
+                                        </a>
+                                        <a th:href="@{/data/scraping?semesterId={id}(id=${semester.id})}"
+                                           class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-download"></i> Scraping-Läufe
+                                        </a>
                                     </div>
                                 </div>
                             </div>
@@ -209,21 +157,52 @@
                 </div>
             </div>
         </div>
-    </main>
 
-    <!-- Footer -->
-    <footer class="bg-light text-center py-3 mt-5">
-        <div class="container">
-            <small class="text-muted">
-                <i class="bi bi-c-circle"></i> 2024 TUBAF Planner - 
-                <a href="https://tu-freiberg.de" target="_blank" class="text-decoration-none">
-                    TU Bergakademie Freiberg
-                </a>
-            </small>
+        <div class="row" th:if="${recentScrapingRuns}">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-activity"></i> Letzte Scraping-Läufe</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                <tr>
+                                    <th>Startzeit</th>
+                                    <th>Dauer</th>
+                                    <th>Status</th>
+                                    <th>Verarbeitete Einträge</th>
+                                    <th></th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <tr th:each="run : ${recentScrapingRuns}">
+                                    <td th:text="${#temporals.format(run.startTime, 'dd.MM.yyyy HH:mm')}">01.01.2024 10:00</td>
+                                    <td th:text="${run.durationMinutes ?: '-'}">15</td>
+                                    <td>
+                                        <span class="badge"
+                                              th:text="${run.status}"
+                                              th:classappend="${run.status.name == 'SUCCESS'} ? ' bg-success' :
+                                                              ${run.status.name == 'FAILED'} ? ' bg-danger' : ' bg-secondary'">
+                                            SUCCESS
+                                        </span>
+                                    </td>
+                                    <td th:text="${run.totalEntries ?: 0}">150</td>
+                                    <td class="text-end">
+                                        <a th:href="@{/data/scraping/run/{id}(id=${run.id})}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-search"></i> Details
+                                        </a>
+                                    </td>
+                                </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-    </footer>
-
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    </div>
+</div>
 </body>
 </html>

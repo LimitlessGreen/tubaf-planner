@@ -24,6 +24,7 @@ class ScheduleController(
         model.addAttribute("activeSemester", activeSemester)
         model.addAttribute("allSemesters", allSemesters)
         model.addAttribute("studyPrograms", studyPrograms)
+        model.addAttribute("activePage", "schedule")
 
         return "schedule/overview"
     }
@@ -42,6 +43,7 @@ class ScheduleController(
         model.addAttribute("scheduleEntries", scheduleEntries)
         model.addAttribute("allSemesters", allSemesters)
         model.addAttribute("allStudyPrograms", allStudyPrograms)
+        model.addAttribute("activePage", "schedule")
 
         return "schedule/grid"
     }
@@ -69,6 +71,7 @@ class ScheduleController(
         model.addAttribute("scheduleGrid", scheduleGrid)
         model.addAttribute("allSemesters", semesters)
         model.addAttribute("allStudyPrograms", studyPrograms)
+        model.addAttribute("activePage", "schedule")
 
         return "schedule/grid"
     }
@@ -86,6 +89,7 @@ class ScheduleController(
         model.addAttribute("roomUtilization", roomUtilization)
         model.addAttribute("semester", selectedSemester)
         model.addAttribute("allSemesters", allSemesters)
+        model.addAttribute("activePage", "schedule")
 
         return "schedule/rooms"
     }

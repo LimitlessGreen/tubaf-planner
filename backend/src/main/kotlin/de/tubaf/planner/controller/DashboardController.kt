@@ -29,6 +29,7 @@ class DashboardController(
         model.addAttribute("allSemesters", allSemesters)
         model.addAttribute("studyProgramStats", studyProgramStats)
         model.addAttribute("roomStats", roomStats)
+        model.addAttribute("activePage", "dashboard")
 
         // Recent changes
         activeSemester?.let { semester ->

@@ -44,6 +44,7 @@ class CoursesController(
         model.addAttribute("studyPrograms", studyProgramService.getActiveStudyPrograms())
         model.addAttribute("selectedStudyProgram", studyProgramId)
         model.addAttribute("search", search)
+        model.addAttribute("activePage", "courses")
 
         return "courses/list"
     }
@@ -54,6 +55,7 @@ class CoursesController(
         val course = courses.find { it.id == courseId } ?: return "redirect:/courses"
 
         model.addAttribute("course", course)
+        model.addAttribute("activePage", "courses")
 
         return "courses/detail"
     }
@@ -65,6 +67,7 @@ class CoursesController(
 
         model.addAttribute("semesters", activeSemesters)
         model.addAttribute("studyProgramStats", studyProgramStats)
+        model.addAttribute("activePage", "courses")
 
         return "courses/stats"
     }
