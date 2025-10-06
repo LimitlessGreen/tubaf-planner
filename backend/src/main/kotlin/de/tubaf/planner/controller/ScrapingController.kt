@@ -227,7 +227,7 @@ class ScrapingController(
     @PostMapping("/discover-and-scrape")
     @Operation(summary = "Discover available semesters and scrape TUBAF data automatically")
     fun discoverAndScrape(): ResponseEntity<Map<String, Any>> {
-        logger.info("🧪 Discovery and scraping started - will find and scrape all available semesters")
+        logger.info("Discovery and scraping started; searching for all available semesters")
 
         return try {
             val started = tubafScrapingService.startDiscoveryJob()
@@ -242,7 +242,7 @@ class ScrapingController(
                 ResponseEntity.ok(mapOf<String, Any>("success" to true, "message" to "Scraping gestartet"))
             }
         } catch (e: Exception) {
-            logger.error("❌ Discovery and scraping failed", e)
+            logger.error("Discovery and scraping failed", e)
             ResponseEntity.internalServerError().body(
                 mapOf<String, Any>(
                     "success" to false,
@@ -328,7 +328,7 @@ class ScrapingController(
     @PostMapping("/debug-scrape")
     @Operation(summary = "Debug endpoint: Scrape and wait for completion, then return all logs")
     fun debugScrape(@RequestBody request: SemesterScrapeRequest): ResponseEntity<Map<String, Any>> {
-        logger.info("🐛 Debug scraping gestartet für: {}", request.semesterIdentifiers)
+        logger.info("Debug scraping gestartet für: {}", request.semesterIdentifiers)
 
         if (request.semesterIdentifiers.isEmpty()) {
             return ResponseEntity.badRequest().body(

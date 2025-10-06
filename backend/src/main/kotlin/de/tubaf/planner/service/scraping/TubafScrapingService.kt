@@ -462,7 +462,7 @@ open class TubafScrapingService(
             try {
                 val programs = session.fetchStudyPrograms()
                 logger.info("Gefundene Studiengänge für {}: {}", semester.name, programs.size)
-                progressTracker.log("INFO", "📚 ${programs.size} Studiengänge gefunden für ${semester.name}")
+                progressTracker.log("INFO", "${programs.size} Studiengänge für ${semester.name} gefunden")
 
                 if (trackProgress) {
                     progressTracker.start(
@@ -752,10 +752,10 @@ open class TubafScrapingService(
                 }
 
         if (scheduleTable == null) {
-            val msg = "🔍 Keine Tabelle mit 'Titel' und 'Zeit' Headers für ${program.code} ($fachSemester)"
+            val msg = "Keine Tabelle mit 'Titel' und 'Zeit' Überschriften für ${program.code} ($fachSemester)"
             logger.info(msg)
             progressTracker.log("WARN", msg)
-            progressTracker.log("INFO", "🔍 Verfügbare Tabellen: ${document.select("table").size}")
+            progressTracker.log("INFO", "Verfügbare Tabellen: ${document.select("table").size}")
             document.select("table").forEachIndexed { index, table ->
                 val headers = table.select("th").map { it.text() }
                 if (headers.isNotEmpty()) {
@@ -765,8 +765,8 @@ open class TubafScrapingService(
             return emptyList()
         }
 
-        logger.info("📋 Gefundene Schedule-Tabelle für {} ({}), starte Parsing...", program.code, fachSemester)
-        progressTracker.log("INFO", "📋 Parse Tabelle für ${program.code} ($fachSemester)")
+        logger.info("Gefundene Schedule-Tabelle für {} ({}), starte Parsing", program.code, fachSemester)
+        progressTracker.log("INFO", "Verarbeite Tabelle für ${program.code} ($fachSemester)")
 
         val rows = mutableListOf<ScrapedRow>()
         var currentCategory = ""
@@ -806,7 +806,7 @@ open class TubafScrapingService(
 
             if (courseTitle.isBlank()) {
                 logger.trace(
-                    "⏭️  Überspringe Zeile ohne Titel: {} Zellen, Type={}, Dozent={}, Tag={}",
+                    "Überspringe Zeile ohne Titel: {} Zellen, Type={}, Dozent={}, Tag={}",
                     cells.size,
                     courseType,
                     lecturer,
@@ -1361,12 +1361,12 @@ open class TubafScrapingService(
         }
 
         fun selectSemester(option: SemesterOption) {
-            logger.info("🔄 Wechsle zu Semester: {}", option.displayName)
-            progressTracker.log("INFO", "🔄 Wechsle zu: ${option.displayName}")
+            logger.info("Wechsle zu Semester: {}", option.displayName)
+            progressTracker.log("INFO", "Wechsel zu: ${option.displayName}")
 
             // Log Cookies vor dem Request
             val cookiesBefore = cookieManager.cookieStore.cookies.size
-            logger.info("🍪 Cookies vor selectSemester: {}", cookiesBefore)
+            logger.info("Cookies vor selectSemester: {}", cookiesBefore)
 
             val formData = mapOf(
                 "sem_wahl" to option.displayName,
@@ -1377,42 +1377,42 @@ open class TubafScrapingService(
 
             // Log Cookies nach dem Request
             val cookiesAfter = cookieManager.cookieStore.cookies.size
-            logger.info("🍪 Cookies nach selectSemester: {}", cookiesAfter)
-            progressTracker.log("INFO", "🍪 Cookies: $cookiesAfter")
+            logger.info("Cookies nach selectSemester: {}", cookiesAfter)
+            progressTracker.log("INFO", "Cookies nach Wechsel: $cookiesAfter")
 
             // Prüfe, welches Semester jetzt aktiv ist
             val activeOption = response.selectFirst("select[name=sem_wahl] option[selected]")
             val activeSemester = activeOption?.text()?.trim() ?: "unbekannt"
-            logger.info("✓ Aktives Semester nach Wechsel: {}", activeSemester)
-            progressTracker.log("INFO", "✓ Aktiv: $activeSemester")
+            logger.info("Aktives Semester nach Wechsel: {}", activeSemester)
+            progressTracker.log("INFO", "Aktives Semester: $activeSemester")
         }
 
         fun fetchStudyPrograms(): List<StudyProgramOption> {
             // Log Cookies vor dem Request
             val cookiesBefore = cookieManager.cookieStore.cookies.size
-            logger.info("🍪 Cookies vor fetchStudyPrograms: {}", cookiesBefore)
-            progressTracker.log("INFO", "🍪 Cookies vor verz.html: $cookiesBefore")
+            logger.info("Cookies vor fetchStudyPrograms: {}", cookiesBefore)
+            progressTracker.log("INFO", "Cookies vor verz.html: $cookiesBefore")
 
             val document = request("GET", "verz.html", referer = url("index.html"))
 
             // Prüfe das aktive Semester auf verz.html
             val activeOption = document.selectFirst("select[name=sem_wahl] option[selected]")
             val activeSemester = activeOption?.text()?.trim() ?: "unbekannt"
-            logger.info("📅 Semester auf verz.html: {}", activeSemester)
-            progressTracker.log("INFO", "📅 Semester: $activeSemester")
+            logger.info("Aktives Semester auf verz.html: {}", activeSemester)
+            progressTracker.log("INFO", "Semester laut verz.html: $activeSemester")
 
             val tableCount = document.select("table").size
-            logger.info("🔎 fetchStudyPrograms: Lade verz.html, Tabellen gefunden: {}", tableCount)
-            progressTracker.log("INFO", "🔎 verz.html geladen: $tableCount Tabellen gefunden")
+            logger.info("fetchStudyPrograms: Lade verz.html, Tabellen gefunden: {}", tableCount)
+            progressTracker.log("INFO", "verz.html geladen: $tableCount Tabellen gefunden")
 
             // Die Studiengänge-Tabelle ist die, die Links zu stgvrz.html enthält
             val table = document.select("table").firstOrNull { it.select("a[href^=stgvrz.html]").isNotEmpty() }
 
             if (table == null) {
-                logger.warn("⚠️  Keine Tabelle mit stgvrz.html Links gefunden!")
-                progressTracker.log("WARN", "⚠️  Keine passende Tabelle gefunden!")
-                logger.info("📄 Verfügbare Tabellen-Texte:")
-                progressTracker.log("INFO", "📄 Vorhandene Tabellen:")
+                logger.warn("Keine Tabelle mit stgvrz.html Links gefunden")
+                progressTracker.log("WARN", "Keine passende Tabelle gefunden")
+                logger.info("Verfügbare Tabellen-Texte:")
+                progressTracker.log("INFO", "Vorhandene Tabellen:")
                 document.select("table").take(5).forEachIndexed { index, t ->
                     val text = t.text().take(100)
                     logger.info("  Tabelle {}: {}", index, text)
@@ -1421,26 +1421,26 @@ open class TubafScrapingService(
                 return emptyList()
             }
 
-            logger.info("✅ Tabelle gefunden! Text: {}", table.text().take(200))
-            progressTracker.log("INFO", "✅ Tabelle gefunden: ${table.text().take(100)}")
+            logger.info("Tabelle mit Studiengängen gefunden. Text: {}", table.text().take(200))
+            progressTracker.log("INFO", "Tabelle gefunden: ${table.text().take(100)}")
 
             val programs = mutableListOf<StudyProgramOption>()
             var currentFaculty = ""
 
             val rowCount = table.select("tr").size
-            logger.info("📊 Zeilen in Tabelle: {}", rowCount)
-            progressTracker.log("INFO", "📊 $rowCount Zeilen in Tabelle")
+            logger.info("Zeilen in Tabelle: {}", rowCount)
+            progressTracker.log("INFO", "$rowCount Zeilen in Tabelle")
 
             for (row in table.select("tr")) {
                 if (row.select("b u").isNotEmpty()) {
                     currentFaculty = row.text().trim()
-                    logger.debug("📁 Fakultät: {}", currentFaculty)
+                    logger.debug("Fakultät: {}", currentFaculty)
                     continue
                 }
 
                 val link = row.selectFirst("a[href^=stgvrz.html]")
                 if (link == null) {
-                    logger.debug("⏭️  Überspringe Zeile ohne stgvrz.html Link: {}", row.text().take(50))
+                    logger.debug("Überspringe Zeile ohne stgvrz.html Link: {}", row.text().take(50))
                     continue
                 }
 
@@ -1456,7 +1456,7 @@ open class TubafScrapingService(
                 // Debug-Ausgabe für potentielle Encoding-Probleme (z.B. BGÖK -> BG�K)
                 if (stdg.contains('\uFFFD') || stdgName.contains('\uFFFD') || stdg.any { it.code > 127 }) {
                     logger.warn(
-                        "⚠️ Studiengang Encoding Verdacht: rawHref='{}' stdg='{}' stdgName='{}' stdgHex={} stdgCP={} stdgNameHex={} stdgNameCP={}",
+                        "Studiengang Encoding Verdacht: rawHref='{}' stdg='{}' stdgName='{}' stdgHex={} stdgCP={} stdgNameHex={} stdgNameCP={}",
                         href.take(160),
                         stdg,
                         stdgName,
@@ -1474,11 +1474,11 @@ open class TubafScrapingService(
                         faculty = currentFaculty,
                         href = href,
                     )
-                logger.debug("➕ Studiengang: {} ({})", displayName, code)
+                logger.debug("Studiengang aufgenommen: {} ({})", displayName, code)
             }
 
-            logger.info("✨ Insgesamt {} Studiengänge gefunden", programs.size)
-            progressTracker.log("INFO", "✨ ${programs.size} Studiengänge gefunden")
+            logger.info("Insgesamt {} Studiengänge gefunden", programs.size)
+            progressTracker.log("INFO", "${programs.size} Studiengänge gefunden")
 
             return programs
         }
@@ -1500,7 +1500,7 @@ open class TubafScrapingService(
             val refererUrl = url("stgvrz.html?stdg=$encodedCode")
             if (program.code.contains('\uFFFD') || program.code.any { it.code > 127 }) {
                 logger.warn(
-                    "🔎 POST openProgramSemester Encoding Check: code='{}' encoded='{}' codeCP={} display='{}' displayCP={}",
+                    "POST openProgramSemester Encoding Check: code='{}' encoded='{}' codeCP={} display='{}' displayCP={}",
                     program.code,
                     encodedCode,
                     program.code.codePoints().toArray().joinToString(",") { "U+" + it.toString(16).uppercase() },
@@ -1586,7 +1586,7 @@ open class TubafScrapingService(
         val isoHasMoreUmlauts = repairedIso.count { it in umlautChars } > repairedUtf8.count { it in umlautChars }
         if (isoHasNoReplacement && (decodedUtf8.contains('\uFFFD') || isoHasMoreUmlauts)) {
             if (repairedIso != decodedUtf8) {
-                logger.warn("🔁 ISO-8859-1 Fallback für Query-Wert angewendet: '{}' -> '{}'", decodedUtf8, repairedIso)
+                logger.warn("ISO-8859-1 Fallback für Query-Wert angewendet: '{}' -> '{}'", decodedUtf8, repairedIso)
             }
             return repairedIso
         }
