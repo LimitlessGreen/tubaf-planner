@@ -17,7 +17,7 @@ class ScrapingConfiguration {
 
     // Parallelisierungs-Optionen
     // Aktiviert die parallele Verarbeitung der Studiengänge innerhalb eines Semesters
-    var parallelEnabled: Boolean = false
+    var parallelEnabled: Boolean = true
 
     // Maximale Anzahl gleichzeitiger Worker (Programme), begrenzt durch Session-Pool Größe
     var parallelMaxWorkers: Int = 4
@@ -26,7 +26,7 @@ class ScrapingConfiguration {
     var parallelSessionPoolSize: Int = 2
 
     // Optionale kurze Pause (ms) zwischen abgeschlossenen Tasks um Server nicht zu fluten
-    var parallelInterTaskDelay: Long = 150
+    var parallelInterTaskDelay: Long = 100
 
     /*
      * Hinweise zur Parallelisierung (Variante B – Session Pool):
