@@ -63,6 +63,50 @@
             border-color: #6c757d;
             color: #495057;
         }
+
+        .log-count-badge {
+            background-color: #f8f9fa;
+            border: 1px solid #dce1e6;
+            border-radius: 999px;
+            padding: 0.25rem 0.6rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            transition: opacity 0.2s ease;
+        }
+
+        .log-count-badge .log-count-label {
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 0.08em;
+            color: #6c757d;
+        }
+
+        .log-count-badge .log-count-value {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .log-count-badge.muted {
+            opacity: 0.6;
+        }
+
+        .log-count-badge[data-log-level="info"] .log-count-value {
+            color: #0d6efd;
+        }
+
+        .log-count-badge[data-log-level="warn"] .log-count-value {
+            color: #fd7e14;
+        }
+
+        .log-count-badge[data-log-level="error"] .log-count-value {
+            color: #dc3545;
+        }
+
+        .log-count-badge[data-log-level="debug"] .log-count-value {
+            color: #6c757d;
+        }
         
         .stat-card {
             transition: transform 0.2s, box-shadow 0.2s;
@@ -456,7 +500,25 @@
                             <h5 class="mb-0">
                                 <i class="fas fa-terminal me-2 text-primary"></i>Live-Logs
                             </h5>
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <div class="d-flex align-items-center gap-3 flex-wrap justify-content-end">
+                                <div class="d-flex align-items-center gap-2 flex-wrap" id="logCountContainer">
+                                    <span class="log-count-badge muted" data-log-level="info">
+                                        <span class="log-count-label">Info</span>
+                                        <span class="log-count-value" id="logCountInfo">0</span>
+                                    </span>
+                                    <span class="log-count-badge muted" data-log-level="warn">
+                                        <span class="log-count-label">Warn</span>
+                                        <span class="log-count-value" id="logCountWarn">0</span>
+                                    </span>
+                                    <span class="log-count-badge muted" data-log-level="error">
+                                        <span class="log-count-label">Fehler</span>
+                                        <span class="log-count-value" id="logCountError">0</span>
+                                    </span>
+                                    <span class="log-count-badge muted" data-log-level="debug">
+                                        <span class="log-count-label">Debug</span>
+                                        <span class="log-count-value" id="logCountDebug">0</span>
+                                    </span>
+                                </div>
                                 <div class="btn-group btn-group-sm" role="group" aria-label="Log-Level-Filter">
                                     <button type="button" class="btn btn-outline-secondary" data-log-filter="all" onclick="setLogFilter('all', this)">Alle</button>
                                     <button type="button" class="btn btn-outline-secondary" data-log-filter="info" onclick="setLogFilter('info', this)">Info</button>
@@ -600,6 +662,13 @@
             danger: 'error',
             debug: 'debug'
         };
+        const logCountElements = {
+            info: document.getElementById('logCountInfo'),
+            warn: document.getElementById('logCountWarn'),
+            error: document.getElementById('logCountError'),
+            debug: document.getElementById('logCountDebug')
+        };
+        let logCounts = { info: 0, warn: 0, error: 0, debug: 0 };
         let availableSemesters = [];
         const selectedSemesters = new Set();
         
@@ -727,6 +796,10 @@
                 updateStatusIndicator(status);
                 updateUI(status === 'running' ? 'running' : 'idle');
                 updateProgress(data);
+
+                if (data.logCounts) {
+                    applyServerLogCounts(data.logCounts);
+                }
 
                 if (data.logs && data.logs.length > 0) {
                     const recentLogs = data.logs.slice(-10);
@@ -862,6 +935,48 @@
             return 'info';
         }
 
+        function updateLogCountersDisplay() {
+            Object.entries(logCountElements).forEach(([level, element]) => {
+                if (!element) return;
+                const value = logCounts[level] ?? 0;
+                element.textContent = value;
+                const badge = element.closest('.log-count-badge');
+                if (!badge) return;
+                if (value > 0) {
+                    badge.classList.remove('muted');
+                } else {
+                    badge.classList.add('muted');
+                }
+            });
+        }
+
+        function applyServerLogCounts(rawCounts) {
+            if (!rawCounts || typeof rawCounts !== 'object') {
+                return;
+            }
+            const normalized = { info: 0, warn: 0, error: 0, debug: 0 };
+            Object.entries(rawCounts).forEach(([key, value]) => {
+                const levelKey = normalizeLogLevel(key);
+                const numericValue = Number(value) || 0;
+                if (levelKey === 'success') {
+                    normalized.info += numericValue;
+                } else if (Object.prototype.hasOwnProperty.call(normalized, levelKey)) {
+                    normalized[levelKey] = numericValue;
+                }
+            });
+            logCounts = normalized;
+            updateLogCountersDisplay();
+        }
+
+        function registerLocalLogCount(level) {
+            const normalizedLevel = level === 'success' ? 'info' : level;
+            if (!Object.prototype.hasOwnProperty.call(logCounts, normalizedLevel)) {
+                return;
+            }
+            logCounts[normalizedLevel] = (logCounts[normalizedLevel] || 0) + 1;
+            updateLogCountersDisplay();
+        }
+
         function levelMatchesFilter(level) {
             switch (currentLogFilter) {
                 case 'info':
@@ -956,6 +1071,7 @@
                 logEntries.shift();
             }
 
+            registerLocalLogCount(normalizedLevel);
             const shouldScroll = scroll && (currentLogFilter === 'all' || levelMatchesFilter(normalizedLevel));
             renderLogList(shouldScroll);
         }
@@ -976,6 +1092,8 @@
         function clearLogs() {
             latestLogTimestamp = null;
             logEntries.length = 0;
+            logCounts = { info: 0, warn: 0, error: 0, debug: 0 };
+            updateLogCountersDisplay();
             renderLogList(false);
         }
         
@@ -1187,6 +1305,7 @@
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            updateLogCountersDisplay();
             refreshStatus();
             loadAvailableSemesters();
             loadConfig();
