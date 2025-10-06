@@ -112,9 +112,18 @@ class ScrapingController(
                 ResponseEntity.ok(mapOf("success" to true, "message" to "Scraping gestartet"))
             }
         } catch (e: Exception) {
-            logger.error("Scraping failed for semester $semesterId", e)
+            logger.error(
+                "❌ Scraping fehlgeschlagen für Semester {}: {} - {}",
+                semesterId,
+                e.javaClass.simpleName,
+                e.message,
+                e,
+            )
             ResponseEntity.internalServerError().body(
-                mapOf("success" to false, "message" to (e.message ?: "Unbekannter Fehler")),
+                mapOf(
+                    "success" to false,
+                    "message" to "${e.javaClass.simpleName}: ${e.message ?: "Unbekannter Fehler"}",
+                ),
             )
         }
     }
@@ -134,9 +143,17 @@ class ScrapingController(
                 ResponseEntity.ok(mapOf("success" to true, "message" to "Scraping gestartet"))
             }
         } catch (e: Exception) {
-            logger.error("Scraping failed for all semesters", e)
+            logger.error(
+                "❌ Scraping aller Semester fehlgeschlagen: {} - {}",
+                e.javaClass.simpleName,
+                e.message,
+                e,
+            )
             ResponseEntity.internalServerError().body(
-                mapOf("success" to false, "message" to (e.message ?: "Unbekannter Fehler")),
+                mapOf(
+                    "success" to false,
+                    "message" to "${e.javaClass.simpleName}: ${e.message ?: "Unbekannter Fehler"}",
+                ),
             )
         }
     }
@@ -164,9 +181,20 @@ class ScrapingController(
     @GetMapping("/available-semesters")
     @Operation(summary = "Get semesters available on the TUBAF website")
     fun getAvailableSemesters(): ResponseEntity<List<RemoteSemesterDescriptor>> = try {
-        ResponseEntity.ok(tubafScrapingService.getAvailableRemoteSemesters())
+        logger.debug("Lade verfügbare Semester von TUBAF...")
+        val semesters = tubafScrapingService.getAvailableRemoteSemesters()
+        logger.info("Erfolgreich {} Semester von TUBAF geladen", semesters.size)
+        ResponseEntity.ok(semesters)
     } catch (e: Exception) {
-        logger.error("Fehler beim Laden der verfügbaren Semester", e)
+        logger.error(
+            "❌ FEHLER beim Laden der verfügbaren Semester: {} - {}",
+            e.javaClass.simpleName,
+            e.message,
+            e,
+        )
+        if (e.cause != null) {
+            logger.error("  ↳ Ursache: {} - {}", e.cause?.javaClass?.simpleName, e.cause?.message)
+        }
         ResponseEntity.internalServerError().build()
     }
 
@@ -200,7 +228,7 @@ class ScrapingController(
                 ResponseEntity.ok(mapOf<String, Any>("success" to true, "message" to "Scraping gestartet"))
             }
         } catch (e: IllegalArgumentException) {
-            logger.warn("Ungültige Semesterangabe beim Scraping", e)
+            logger.warn("⚠️ Ungültige Semesterangabe: {}", e.message, e)
             ResponseEntity.badRequest().body(
                 mapOf<String, Any>(
                     "success" to false,
@@ -208,11 +236,16 @@ class ScrapingController(
                 ),
             )
         } catch (e: Exception) {
-            logger.error("Fehler beim Scraping", e)
+            logger.error(
+                "❌ Scraping fehlgeschlagen: {} - {}",
+                e.javaClass.simpleName,
+                e.message,
+                e,
+            )
             ResponseEntity.internalServerError().body(
                 mapOf<String, Any>(
                     "success" to false,
-                    "message" to (e.message ?: "Unbekannter Fehler"),
+                    "message" to "${e.javaClass.simpleName}: ${e.message ?: "Unbekannter Fehler"}",
                 ),
             )
         }
@@ -242,11 +275,16 @@ class ScrapingController(
                 ResponseEntity.ok(mapOf<String, Any>("success" to true, "message" to "Scraping gestartet"))
             }
         } catch (e: Exception) {
-            logger.error("Discovery and scraping failed", e)
+            logger.error(
+                "❌ Discovery und Scraping fehlgeschlagen: {} - {}",
+                e.javaClass.simpleName,
+                e.message,
+                e,
+            )
             ResponseEntity.internalServerError().body(
                 mapOf<String, Any>(
                     "success" to false,
-                    "message" to "Discovery and scraping failed: ${e.message}",
+                    "message" to "Discovery fehlgeschlagen: ${e.javaClass.simpleName} - ${e.message}",
                 ),
             )
         }
@@ -321,9 +359,17 @@ class ScrapingController(
                 ),
             )
         } catch (e: Exception) {
-            logger.error("Error cancelling scraping", e)
+            logger.error(
+                "❌ Fehler beim Abbrechen des Scrapings: {} - {}",
+                e.javaClass.simpleName,
+                e.message,
+                e,
+            )
             ResponseEntity.internalServerError().body(
-                mapOf("success" to false, "message" to (e.message ?: "Unbekannter Fehler")),
+                mapOf(
+                    "success" to false,
+                    "message" to "${e.javaClass.simpleName}: ${e.message ?: "Unbekannter Fehler"}",
+                ),
             )
         }
     }
@@ -388,11 +434,17 @@ class ScrapingController(
 
             ResponseEntity.ok(response)
         } catch (e: Exception) {
-            logger.error("Debug scraping failed", e)
+            logger.error(
+                "❌ Debug-Scraping fehlgeschlagen: {} - {}",
+                e.javaClass.simpleName,
+                e.message,
+                e,
+            )
             ResponseEntity.internalServerError().body(
                 mapOf<String, Any>(
                     "success" to false,
-                    "message" to (e.message ?: "Unbekannter Fehler"),
+                    "message" to "${e.javaClass.simpleName}: ${e.message ?: "Unbekannter Fehler"}",
+                    "stackTrace" to (e.stackTrace.take(10).map { it.toString() }),
                 ),
             )
         }
