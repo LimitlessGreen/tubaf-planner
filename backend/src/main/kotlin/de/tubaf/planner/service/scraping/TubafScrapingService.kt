@@ -47,12 +47,12 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import java.util.Collections
 import java.util.EnumMap
 import java.util.Locale
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.Callable
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -226,7 +226,7 @@ open class TubafScrapingService(
         }
 
         val completed = AtomicInteger(0)
-        val errors = Collections.synchronizedList(mutableListOf<Pair<StudyProgramOption, Throwable>>())
+        val errors = CopyOnWriteArrayList<Pair<StudyProgramOption, Throwable>>()
 
         val futures = programs.map { program ->
             workerExecutor.submit(
