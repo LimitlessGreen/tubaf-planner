@@ -702,7 +702,7 @@ open class TubafScrapingService(
                         } else {
                             val newEntry =
                                 ScheduleEntry(
-                                    course = course,
+                                    course = courseWithEntries, // Verwende courseWithEntries statt course (managed entity)
                                     room = room,
                                     dayOfWeek = dayOfWeek,
                                     startTime = timeRange.first,
