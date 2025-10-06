@@ -832,6 +832,15 @@ open class TubafScrapingService(
                 ?: studyProgramRepository.findByNameContainingIgnoreCase(option.displayName).firstOrNull()
                 ?: return
 
+        if (studyProgram.id == null) {
+            logger.warn(
+                "Überspringe Verknüpfung für Kurs {} mit Studiengang '{}' weil die ID fehlt",
+                course.id,
+                option.code,
+            )
+            return
+        }
+
         // Lade Course mit allen Relations um sicherzustellen dass die Entity im Persistence Context ist
         val managedCourse = courseRepository.findById(course.id!!).orElse(null) ?: return
 
@@ -1392,33 +1401,60 @@ open class TubafScrapingService(
     }
 
     private fun buildShortName(displayName: String): String {
-        val trimmed = displayName.trim().lowercase(Locale.GERMAN)
-        return when {
-            trimmed.startsWith("winter") -> "WS" + trimmed.filter { it.isDigit() }.takeLast(2)
-            trimmed.startsWith("sommer") -> "SS" + trimmed.filter { it.isDigit() }.takeLast(2)
-            else -> displayName.take(6).uppercase(Locale.GERMAN)
+        val trimmed = displayName.trim()
+        val normalized = trimmed.lowercase(Locale.GERMAN)
+        val years = Regex("(19|20)\\d{2}").findAll(trimmed).map { it.value }.toList()
+        val prefix =
+            when {
+                normalized.startsWith("winter") -> "WS"
+                normalized.startsWith("sommer") -> "SS"
+                else -> trimmed.take(2).uppercase(Locale.GERMAN)
+            }
+
+        if (prefix == "WS") {
+            if (years.size >= 2) {
+                return prefix + years[0].takeLast(2) + years[1].takeLast(2)
+            }
+            if (years.size == 1) {
+                return prefix + years[0].takeLast(2)
+            }
         }
+
+        if (prefix == "SS") {
+            if (years.isNotEmpty()) {
+                return prefix + years.first().takeLast(2)
+            }
+        }
+
+        if (years.isNotEmpty()) {
+            return prefix + years.joinToString("") { it.takeLast(2) }
+        }
+
+        return trimmed.take(6).uppercase(Locale.GERMAN)
     }
 
     private fun mapSemesterDates(displayName: String): Pair<LocalDate, LocalDate> {
         val normalized = displayName.lowercase(Locale.GERMAN)
+        val years = Regex("(19|20)\\d{2}").findAll(displayName).map { it.value.toInt() }.toList()
         val currentYear = LocalDate.now().year
+
         return when {
             normalized.contains("winter") -> {
-                val year = extractYear(displayName, currentYear)
-                LocalDate.of(year, 10, 1) to LocalDate.of(year + 1, 3, 31)
+                val startYear = years.minOrNull() ?: currentYear
+                val endYear = when {
+                    years.size >= 2 -> years.maxOrNull() ?: (startYear + 1)
+                    else -> startYear + 1
+                }
+                LocalDate.of(startYear, 10, 1) to LocalDate.of(endYear, 3, 31)
             }
+
             normalized.contains("sommer") -> {
-                val year = extractYear(displayName, currentYear)
+                val year = years.firstOrNull() ?: currentYear
                 LocalDate.of(year, 4, 1) to LocalDate.of(year, 9, 30)
             }
+
             else -> LocalDate.of(currentYear, 4, 1) to LocalDate.of(currentYear, 9, 30)
         }
-    }
-
-    private fun extractYear(value: String, fallback: Int): Int {
-        val match = Regex("20\\d{2}").find(value)
-        return match?.value?.toInt() ?: fallback
     }
 
     private fun buildSemesterLookup(options: List<SemesterOption>): Map<String, SemesterOption> {
@@ -1587,8 +1623,8 @@ open class TubafScrapingService(
                 val displayName = link.text().trim()
 
                 val queryParams = parseQueryParameters(href)
-                val stdg = queryParams["stdg"] ?: code
-                val stdgName = queryParams["stdg1"] ?: displayName
+                val stdg = (queryParams["stdg"] ?: code).trim()
+                val stdgName = (queryParams["stdg1"] ?: displayName).trim()
 
                 // Debug-Ausgabe für potentielle Encoding-Probleme (z.B. BGÖK -> BG�K)
                 if (stdg.contains('\uFFFD') || stdgName.contains('\uFFFD') || stdg.any { it.code > 127 }) {
