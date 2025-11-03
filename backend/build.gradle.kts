@@ -60,7 +60,7 @@ dependencies {
     // Entfernt: io.ktor client libs (nicht verwendet) – falls in Zukunft benötigt, gezielt wieder hinzufügen
 	
     // API Documentation
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.13")
 	
     // Logging & Monitoring
     implementation("io.micrometer:micrometer-registry-prometheus")
